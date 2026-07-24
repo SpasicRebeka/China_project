@@ -50,9 +50,25 @@ def project_env_has_placeholder_key() -> bool:
 
 def get_text_model() -> str:
     """Return the OpenAI text model used for translation and simplification."""
-    return os.environ.get("LANGUAGE_MODEL", "gpt-5.6")
+    return os.environ.get("LANGUAGE_MODEL", "gpt-5.6-luna")
 
 
 def get_transcription_model() -> str:
     """Return the OpenAI audio transcription model."""
     return os.environ.get("TRANSCRIPTION_MODEL", "gpt-4o-transcribe")
+
+
+def get_realtime_transcription_model() -> str:
+    """Return the low-latency realtime transcription model."""
+    return os.environ.get("REALTIME_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe")
+
+
+def get_realtime_transcription_delay() -> str:
+    """Return the realtime transcription latency/accuracy tradeoff."""
+    return os.environ.get("REALTIME_TRANSCRIPTION_DELAY", "minimal")
+
+
+def get_language_reasoning_effort() -> str | None:
+    """Return the reasoning effort for low-latency language processing."""
+    effort = os.environ.get("LANGUAGE_REASONING_EFFORT", "none").strip().lower()
+    return effort or None
