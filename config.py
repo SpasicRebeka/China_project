@@ -9,12 +9,6 @@ from dotenv import dotenv_values, load_dotenv
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-OPENAI_API_KEY_PLACEHOLDERS = {
-    "",
-    "replace-with-your-openai-api-key",
-    "your-openai-api-key",
-}
-
 
 def load_project_environment() -> None:
     """Load local environment variables without requiring a shell-specific setup."""
@@ -34,18 +28,7 @@ def get_openai_api_key() -> str | None:
     key = os.environ.get("OPENAI_API_KEY", "").strip()
     normalized_key = key.lower()
 
-    if normalized_key in OPENAI_API_KEY_PLACEHOLDERS:
-        return None
-    if normalized_key.startswith("replace-with"):
-        return None
     return key
-
-
-def project_env_has_placeholder_key() -> bool:
-    """Check whether .env still has the example key value."""
-    values = dotenv_values(PROJECT_ROOT / ".env")
-    key = (values.get("OPENAI_API_KEY") or "").strip().lower()
-    return key in OPENAI_API_KEY_PLACEHOLDERS or key.startswith("replace-with")
 
 
 def get_text_model() -> str:
@@ -60,7 +43,7 @@ def get_transcription_model() -> str:
 
 def get_realtime_transcription_model() -> str:
     """Return the low-latency realtime transcription model."""
-    return os.environ.get("REALTIME_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe")
+    return os.environ.get("REALTIME_TRANSCRIPTION_MODEL", "gpt-realtime-whisper")
 
 
 def get_realtime_transcription_delay() -> str:
