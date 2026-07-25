@@ -56,6 +56,12 @@ Start realtime Chinese captions with the default microphone:
 .\.venv\Scripts\python.exe .\realtime_transcribe.py --language zh
 ```
 
+For English testing, use English mode:
+
+```powershell
+.\.venv\Scripts\python.exe .\realtime_transcribe.py --language en
+```
+
 Use a specific microphone device index:
 
 ```powershell
@@ -71,6 +77,8 @@ For a quiet doctor-patient room, start here:
 ```
 
 Speak one full sentence, then pause for about one second. Quiet-room mode favors complete, accurate doctor sentences over word-by-word display while someone is still talking.
+
+By default, realtime transcription uses a medical dictation prompt for doctor-patient vocabulary while still asking the model to transcribe literally. This prompt is used by `gpt-4o-mini-transcribe`; `gpt-realtime-whisper` does not support the `prompt` parameter.
 
 Use `--mode low-latency` only when you want faster but less stable rolling chunks:
 

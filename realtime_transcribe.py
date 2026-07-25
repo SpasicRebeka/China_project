@@ -6,6 +6,7 @@ import argparse
 import base64
 import math
 import queue
+import re
 import signal
 import sys
 import threading
@@ -30,11 +31,108 @@ SAMPLE_RATE = 24_000
 CHANNELS = 1
 SAMPLE_WIDTH_BYTES = 2
 REALTIME_WHISPER_MODEL = "gpt-realtime-whisper"
-DEFAULT_MEDICAL_PROMPT = (
-    "Hospital doctor-patient consultation. Expect medical symptoms, body parts, "
-    "blood pressure, heart rate, oxygen saturation, temperature, medication names, "
-    "dosages, allergies, follow-up dates, and simple clinical instructions."
+DEFAULT_MEDICAL_TRANSCRIPTION_PROMPT = (
+    "Doctor-patient hospital conversation. Transcribe the spoken words literally. "
+    "Use medical vocabulary only when it is actually spoken. Expect symptoms, body parts, "
+    "blood pressure, heart rate, oxygen saturation, temperature, medication names, dosages, "
+    "allergies, follow-up dates, and simple clinical instructions. Do not summarize, "
+    "translate, explain, complete unfinished sentences, or add missing words."
 )
+WORD_PATTERN = re.compile(r"[^\W_]+(?:'[^\W_]+)?", re.UNICODE)
+MID_SENTENCE_LOWERCASE_STARTS = {
+    "a",
+    "about",
+    "after",
+    "also",
+    "am",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "because",
+    "been",
+    "before",
+    "being",
+    "but",
+    "by",
+    "can",
+    "could",
+    "did",
+    "do",
+    "does",
+    "down",
+    "for",
+    "from",
+    "go",
+    "had",
+    "has",
+    "have",
+    "he",
+    "her",
+    "here",
+    "him",
+    "his",
+    "how",
+    "if",
+    "in",
+    "into",
+    "is",
+    "it",
+    "like",
+    "listen",
+    "look",
+    "make",
+    "may",
+    "might",
+    "must",
+    "need",
+    "no",
+    "not",
+    "of",
+    "on",
+    "or",
+    "over",
+    "say",
+    "see",
+    "shall",
+    "she",
+    "should",
+    "so",
+    "take",
+    "tell",
+    "than",
+    "that",
+    "the",
+    "then",
+    "there",
+    "these",
+    "they",
+    "this",
+    "those",
+    "to",
+    "under",
+    "up",
+    "use",
+    "was",
+    "we",
+    "were",
+    "what",
+    "when",
+    "where",
+    "while",
+    "who",
+    "why",
+    "will",
+    "with",
+    "without",
+    "would",
+    "yes",
+    "you",
+    "your",
+}
+SENTENCE_ENDINGS = ".!?。！？"
 
 
 class Pcm16MonoResampler:
@@ -116,8 +214,11 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--prompt",
-        default=DEFAULT_MEDICAL_PROMPT,
-        help="Prompt hint for medical vocabulary. Used by gpt-4o transcription models.",
+        default=DEFAULT_MEDICAL_TRANSCRIPTION_PROMPT,
+        help=(
+            "Prompt hint for medical dictation vocabulary. Used by realtime "
+            "transcription models that support prompts."
+        ),
     )
     parser.add_argument(
         "--duration",
@@ -388,21 +489,150 @@ def drain_audio_queue(audio_queue: queue.Queue[bytes]) -> None:
             return
 
 
+def transcript_separator(current_text: str, next_text: str) -> str:
+    """Choose a separator for appending one transcript part to another."""
+    if not current_text or not next_text:
+        return ""
+
+    previous = current_text[-1]
+    next_character = next_text[0]
+    if previous.isspace() or next_character.isspace():
+        return ""
+    if _is_cjk_or_fullwidth(previous) or _is_cjk_or_fullwidth(next_character):
+        return ""
+    if previous in "([{/\\-" or next_character in ".,;:!?)]}%/\\-":
+        return ""
+    return " "
+
+
+def _is_cjk_or_fullwidth(character: str) -> bool:
+    codepoint = ord(character)
+    return (
+        0x3000 <= codepoint <= 0x303F
+        or 0x3400 <= codepoint <= 0x4DBF
+        or 0x4E00 <= codepoint <= 0x9FFF
+        or 0xF900 <= codepoint <= 0xFAFF
+        or 0xFF00 <= codepoint <= 0xFFEF
+        or 0x20000 <= codepoint <= 0x2EBEF
+    )
+
+
+def _contains_cjk_or_fullwidth(text: str) -> bool:
+    return any(_is_cjk_or_fullwidth(character) for character in text)
+
+
+def _word_spans(text: str) -> list[tuple[str, int, int]]:
+    return [
+        (match.group(0).casefold(), match.start(), match.end())
+        for match in WORD_PATTERN.finditer(text)
+    ]
+
+
+def _suffix_prefix_overlap_length(current_text: str, next_text: str) -> int:
+    current_text = current_text.rstrip()
+    next_text = next_text.lstrip()
+    max_overlap = min(80, len(current_text), len(next_text))
+
+    for length in range(max_overlap, 0, -1):
+        current_suffix = current_text[-length:]
+        next_prefix = next_text[:length]
+        if current_suffix.casefold() == next_prefix.casefold():
+            return length
+    return 0
+
+
+def trim_overlapping_prefix(current_text: str, next_text: str) -> str:
+    """Remove repeated text caused by overlapping realtime transcript chunks."""
+    text = next_text.strip()
+    if not current_text or not text:
+        return text
+
+    character_overlap = _suffix_prefix_overlap_length(current_text, text)
+    if character_overlap == len(text):
+        return ""
+    if character_overlap >= 4 or _contains_cjk_or_fullwidth(text[:character_overlap]):
+        return text[character_overlap:].lstrip()
+
+    current_words = _word_spans(current_text)
+    next_words = _word_spans(text)
+    max_overlap = min(8, len(current_words), len(next_words))
+    for word_count in range(max_overlap, 0, -1):
+        current_suffix = [word for word, _, _ in current_words[-word_count:]]
+        next_prefix = [word for word, _, _ in next_words[:word_count]]
+        if current_suffix == next_prefix:
+            cut_index = next_words[word_count - 1][2]
+            return text[cut_index:].lstrip()
+
+    return text
+
+
+def normalize_mid_sentence_capitalization(current_text: str, next_text: str) -> str:
+    """Lowercase common words that were capitalized only because a chunk started."""
+    if not current_text or not next_text:
+        return next_text
+
+    current_text = current_text.rstrip()
+    if not current_text or current_text[-1] in SENTENCE_ENDINGS:
+        return next_text
+    if _is_cjk_or_fullwidth(next_text[0]):
+        return next_text
+
+    match = WORD_PATTERN.match(next_text)
+    if match is None:
+        return next_text
+
+    word = match.group(0)
+    if word == "I" or not word[0].isupper() or not word[1:].islower():
+        return next_text
+    if word.casefold() not in MID_SENTENCE_LOWERCASE_STARTS:
+        return next_text
+
+    return word[0].lower() + next_text[1:]
+
+
+def append_transcript_part(current_text: str, next_text: str) -> tuple[str, str]:
+    """Append one transcript part and return the new transcript plus printed addition."""
+    text = trim_overlapping_prefix(current_text, next_text)
+    if not text:
+        return current_text, ""
+
+    text = normalize_mid_sentence_capitalization(current_text, text)
+    addition = transcript_separator(current_text, text) + text
+    return current_text + addition, addition
+
+
+def join_transcript_parts(parts: list[str]) -> str:
+    transcript = ""
+    for part in parts:
+        transcript, _ = append_transcript_part(transcript, part)
+    return transcript
+
+
 def receive_events(
     connection,
     stop_event: threading.Event,
     completed: list[str],
+    display_segments: bool = False,
     debug: bool = False,
 ) -> None:
     seen_transcripts: set[str] = set()
+    continuous_transcript = ""
 
-    def show_transcript(label: str, text: str) -> None:
+    def show_transcript(text: str) -> None:
+        nonlocal continuous_transcript
+        text = text.strip()
         normalized = " ".join(text.split())
         if not normalized or normalized in seen_transcripts:
             return
+
+        updated_transcript, addition = append_transcript_part(continuous_transcript, text)
+        if not addition:
+            return
+
         seen_transcripts.add(normalized)
         completed.append(text)
-        print(f"\n{label}: {text}\n")
+        continuous_transcript = updated_transcript
+        print(addition, end="", flush=True)
 
     try:
         for event in connection:
@@ -414,15 +644,14 @@ def receive_events(
             }:
                 print(f"\n[event] {event_type}")
             if event_type == "conversation.item.input_audio_transcription.delta":
-                delta = getattr(event, "delta", None)
-                if delta:
-                    print(delta, end="", flush=True)
+                continue
             elif event_type == "conversation.item.input_audio_transcription.segment":
-                text = getattr(event, "text", "").strip()
-                show_transcript("Segment", text)
+                if display_segments:
+                    text = getattr(event, "text", "").strip()
+                    show_transcript(text)
             elif event_type == "conversation.item.input_audio_transcription.completed":
                 transcript = getattr(event, "transcript", "").strip()
-                show_transcript("Final", transcript)
+                show_transcript(transcript)
             elif event_type == "conversation.item.input_audio_transcription.failed":
                 error = getattr(event, "error", None)
                 print(f"\nTranscription failed: {error}", file=sys.stderr)
@@ -637,6 +866,8 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
             f"Mode: {args.mode}; transcription model: {args.transcription_model}; "
             f"cloud noise reduction: {args.noise_reduction}"
         )
+        if args.transcription_model == REALTIME_WHISPER_MODEL and args.prompt:
+            print("Prompt note: gpt-realtime-whisper does not support prompts, so the prompt is ignored.")
         print("Connecting to realtime transcription...")
         with client.realtime.connect(extra_query={"intent": "transcription"}) as connection:
             connection.send(build_session_update(args))
@@ -646,7 +877,13 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
 
             receiver = threading.Thread(
                 target=receive_events,
-                args=(connection, stop_event, completed, args.debug),
+                args=(
+                    connection,
+                    stop_event,
+                    completed,
+                    args.transcription_model == REALTIME_WHISPER_MODEL,
+                    args.debug,
+                ),
                 daemon=True,
             )
             sender = threading.Thread(
@@ -670,9 +907,12 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
             connection.close()
             receiver.join(timeout=2)
 
+    if completed:
+        print()
+
     if args.output:
         output_path = args.output.expanduser().resolve()
-        output_path.write_text("\n".join(completed), encoding="utf-8")
+        output_path.write_text(join_transcript_parts(completed), encoding="utf-8")
         print(f"\nSaved transcript to: {output_path}")
 
     return 0
