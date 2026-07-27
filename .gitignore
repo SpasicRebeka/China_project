@@ -1,7 +1,10 @@
 .venv/
+env
 __pycache__/
 *.py[cod]
 .env
+*.patient.json
+*.patient.txt
+*.transcript.txt
 .pytest_cache/
 .ruff_cache/
-
