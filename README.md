@@ -73,7 +73,7 @@ The default realtime mode is `quiet-room`. It streams audio continuously and let
 For a quiet doctor-patient room, start here:
 
 ```powershell
-.\.venv\Scripts\python.exe .\realtime_transcribe.py --device 9 --language zh --mode quiet-room --noise-reduction near_field
+.\.venv\Scripts\python.exe .\realtime_transcribe.py --device 9 --language zh --mode quiet-room
 ```
 
 Speak one full sentence, then pause for about one second. Quiet-room mode favors complete, accurate doctor sentences over word-by-word display while someone is still talking.
@@ -97,7 +97,7 @@ Speak normally and look for the RMS number to rise. If it barely changes, try an
 To enable the local gate in a very noisy room:
 
 ```powershell
-.\.venv\Scripts\python.exe .\realtime_transcribe.py --device 9 --language zh --local-noise-gate --threshold 80 --debug
+.\.venv\Scripts\python.exe .\realtime_transcribe.py --device 9 --language zh --debug
 ```
 
 To print internal commit timing while testing:

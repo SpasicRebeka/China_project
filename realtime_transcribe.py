@@ -12,8 +12,6 @@ import sys
 import threading
 import time
 from array import array
-from collections import deque
-from dataclasses import dataclass
 from pathlib import Path
 
 import sounddevice as sd
@@ -32,11 +30,7 @@ CHANNELS = 1
 SAMPLE_WIDTH_BYTES = 2
 REALTIME_WHISPER_MODEL = "gpt-realtime-whisper"
 DEFAULT_MEDICAL_TRANSCRIPTION_PROMPT = (
-    "Doctor-patient hospital conversation. Transcribe the spoken words literally. "
-    "Use medical vocabulary only when it is actually spoken. Expect symptoms, body parts, "
-    "blood pressure, heart rate, oxygen saturation, temperature, medication names, dosages, "
-    "allergies, follow-up dates, and simple clinical instructions. Do not summarize, "
-    "translate, explain, complete unfinished sentences, or add missing words."
+    "Medical vocabulary. Doctor to patient communication."
 )
 WORD_PATTERN = re.compile(r"[^\W_]+(?:'[^\W_]+)?", re.UNICODE)
 MID_SENTENCE_LOWERCASE_STARTS = {
@@ -174,22 +168,6 @@ class Pcm16MonoResampler:
         return output.tobytes()
 
 
-@dataclass
-class NoiseGateState:
-    """Track local speech detection and commit boundaries."""
-
-    threshold: float
-    silence_frames_to_commit: int
-    min_speech_frames: int
-    max_speech_frames: int
-    prefix_frames: int
-    enabled: bool = True
-
-    in_speech: bool = False
-    speech_frames: int = 0
-    silent_frames: int = 0
-
-
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Stream microphone audio to OpenAI realtime transcription."
@@ -238,57 +216,22 @@ def parse_arguments() -> argparse.Namespace:
         help="Realtime transcription delay. Minimal is fastest; higher can improve accuracy.",
     )
     parser.add_argument(
-        "--noise-reduction",
-        choices=["near_field", "far_field", "off"],
-        default="near_field",
-        help="Cloud input noise reduction. Use near_field for a close directional mic.",
-    )
-    parser.add_argument(
         "--vad-threshold",
         type=float,
         default=0.35,
         help="Server VAD threshold for quiet-room mode. Lower is more sensitive.",
     )
     parser.add_argument(
-        "--calibrate-seconds",
-        type=float,
-        default=1.5,
-        help="Seconds used to measure room noise before streaming speech.",
-    )
-    parser.add_argument(
-        "--noise-multiplier",
-        type=float,
-        default=3.0,
-        help="Speech threshold multiplier above calibrated room noise.",
-    )
-    parser.add_argument(
-        "--threshold",
-        type=float,
-        help="Manual RMS speech threshold. Overrides calibration.",
-    )
-    parser.add_argument(
-        "--min-threshold",
-        type=float,
-        default=120.0,
-        help="Lowest automatic RMS threshold after calibration.",
-    )
-    parser.add_argument(
         "--silence-ms",
         type=int,
-        default=650,
+        default=200,
         help="Silence duration before committing one speech segment.",
     )
     parser.add_argument(
         "--prefix-ms",
         type=int,
-        default=500,
+        default=200,
         help="Audio kept before speech starts so first words are not clipped.",
-    )
-    parser.add_argument(
-        "--min-utterance-ms",
-        type=int,
-        default=120,
-        help="Ignore speech bursts shorter than this.",
     )
     parser.add_argument(
         "--max-segment-seconds",
@@ -303,22 +246,6 @@ def parse_arguments() -> argparse.Namespace:
         help="Microphone chunk size in milliseconds. Lower can reduce latency.",
     )
     parser.add_argument(
-        "--local-noise-gate",
-        action="store_true",
-        help="Only stream audio above the calibrated speech threshold.",
-    )
-    parser.add_argument(
-        "--no-local-noise-gate",
-        dest="local_noise_gate",
-        action="store_false",
-        help="Stream all microphone audio and commit on timed segments. This is the default.",
-    )
-    parser.add_argument(
-        "--monitor-levels",
-        action="store_true",
-        help="Show microphone RMS levels without connecting to OpenAI.",
-    )
-    parser.add_argument(
         "--debug",
         action="store_true",
         help="Print realtime event and local speech-gate diagnostics.",
@@ -329,7 +256,6 @@ def parse_arguments() -> argparse.Namespace:
         default=5.0,
         help="Wait this long for final transcripts after stopping.",
     )
-    parser.set_defaults(local_noise_gate=False)
     return parser.parse_args()
 
 
@@ -351,26 +277,7 @@ def get_input_sample_rate(device: int | str | None) -> int:
     return int(device_info["default_samplerate"])
 
 
-def rms_level(audio_bytes: bytes) -> float:
-    samples = array("h")
-    samples.frombytes(audio_bytes)
-    if sys.byteorder != "little":
-        samples.byteswap()
-    if not samples:
-        return 0.0
-    square_sum = sum(sample * sample for sample in samples)
-    return math.sqrt(square_sum / len(samples))
-
-
-def ms_to_frames(ms: int, block_ms: int) -> int:
-    return max(1, math.ceil(ms / block_ms))
-
-
 def build_session_update(args: argparse.Namespace) -> dict:
-    noise_reduction = None
-    if args.noise_reduction != "off":
-        noise_reduction = {"type": args.noise_reduction}
-
     transcription = {
         "model": args.transcription_model,
         "language": args.language,
@@ -396,7 +303,7 @@ def build_session_update(args: argparse.Namespace) -> dict:
             "audio": {
                 "input": {
                     "format": {"type": "audio/pcm", "rate": SAMPLE_RATE},
-                    "noise_reduction": noise_reduction,
+                    "noise_reduction": {"type": "near_field"},
                     "transcription": transcription,
                     "turn_detection": turn_detection,
                 }
@@ -425,31 +332,6 @@ def audio_callback_factory(audio_queue: queue.Queue[bytes], stop_event: threadin
                 pass
 
     return callback
-
-
-def calibrate_noise(
-    audio_queue: queue.Queue[bytes],
-    resampler: Pcm16MonoResampler,
-    seconds: float,
-    block_seconds: float,
-    min_threshold: float,
-    multiplier: float,
-) -> float:
-    frames_needed = max(1, math.ceil(seconds / block_seconds))
-    levels: list[float] = []
-
-    print(f"Calibrating room noise for {seconds:.1f}s. Stay quiet near the microphone...")
-    while len(levels) < frames_needed:
-        raw_audio = audio_queue.get()
-        audio_bytes = resampler.process(raw_audio)
-        if not audio_bytes:
-            continue
-        levels.append(rms_level(audio_bytes))
-
-    average_noise = sum(levels) / len(levels)
-    threshold = max(min_threshold, average_noise * multiplier)
-    print(f"Room noise RMS: {average_noise:.1f}; speech threshold: {threshold:.1f}")
-    return threshold
 
 
 def send_audio(connection, audio_bytes: bytes) -> None:
@@ -669,13 +551,12 @@ def audio_sender(
     audio_queue: queue.Queue[bytes],
     stop_event: threading.Event,
     resampler: Pcm16MonoResampler,
-    gate: NoiseGateState,
+    max_segment_frames: int,
     server_vad: bool = False,
     debug: bool = False,
 ) -> None:
-    prefix_buffer: deque[bytes] = deque(maxlen=gate.prefix_frames)
     has_uncommitted_audio = False
-    last_debug_at = 0.0
+    frames_since_commit = 0
 
     while not stop_event.is_set():
         try:
@@ -692,119 +573,21 @@ def audio_sender(
             has_uncommitted_audio = True
             continue
 
-        if not gate.enabled:
-            send_audio(connection, audio_bytes)
-            has_uncommitted_audio = True
-            gate.speech_frames += 1
-            if gate.speech_frames >= gate.max_speech_frames:
-                if debug:
-                    print("\n[commit] rolling segment")
-                commit_buffer(connection)
-                has_uncommitted_audio = False
-                gate.speech_frames = 0
-            continue
-
-        level = rms_level(audio_bytes)
-        is_speech = level >= gate.threshold
-        now = time.monotonic()
-        if debug and now - last_debug_at >= 1.0:
-            marker = "speech" if is_speech else "quiet"
-            print(f"\n[level] rms={level:.1f} threshold={gate.threshold:.1f} {marker}")
-            last_debug_at = now
-
-        if is_speech and not gate.in_speech:
-            gate.in_speech = True
-            gate.speech_frames = 0
-            gate.silent_frames = 0
-            for prefix_bytes in prefix_buffer:
-                send_audio(connection, prefix_bytes)
-            prefix_buffer.clear()
-
-        if gate.in_speech:
-            send_audio(connection, audio_bytes)
-            has_uncommitted_audio = True
-            gate.speech_frames += 1
-            gate.silent_frames = 0 if is_speech else gate.silent_frames + 1
-
-            should_commit_for_silence = gate.silent_frames >= gate.silence_frames_to_commit
-            should_commit_for_length = gate.speech_frames >= gate.max_speech_frames
-            if should_commit_for_silence or should_commit_for_length:
-                if has_uncommitted_audio and gate.speech_frames >= gate.min_speech_frames:
-                    if debug:
-                        print("\n[commit] speech segment")
-                    commit_buffer(connection)
-                elif has_uncommitted_audio:
-                    connection.input_audio_buffer.clear()
-                has_uncommitted_audio = False
-                gate.in_speech = False
-                gate.speech_frames = 0
-                gate.silent_frames = 0
-        else:
-            prefix_buffer.append(audio_bytes)
+        send_audio(connection, audio_bytes)
+        has_uncommitted_audio = True
+        frames_since_commit += 1
+        if frames_since_commit >= max_segment_frames:
+            if debug:
+                print("\n[commit] timed segment")
+            commit_buffer(connection)
+            has_uncommitted_audio = False
+            frames_since_commit = 0
 
     if has_uncommitted_audio:
         if debug and not server_vad:
             print("\n[commit] final segment")
         if not server_vad:
             commit_buffer(connection)
-
-
-def monitor_levels(args: argparse.Namespace) -> int:
-    block_seconds = args.block_ms / 1000
-    audio_queue: queue.Queue[bytes] = queue.Queue(maxsize=300)
-    stop_event = threading.Event()
-    signal.signal(signal.SIGINT, lambda signum, frame: stop_event.set())
-
-    device = parse_device(args.device)
-    input_sample_rate = get_input_sample_rate(device)
-    blocksize = int(input_sample_rate * (args.block_ms / 1000))
-    resampler = Pcm16MonoResampler(source_rate=input_sample_rate, target_rate=SAMPLE_RATE)
-    callback = audio_callback_factory(audio_queue, stop_event)
-
-    with sd.RawInputStream(
-        samplerate=input_sample_rate,
-        blocksize=blocksize,
-        channels=CHANNELS,
-        dtype="int16",
-        device=device,
-        callback=callback,
-    ):
-        threshold = args.threshold
-        if threshold is None:
-            threshold = calibrate_noise(
-                audio_queue,
-                resampler,
-                args.calibrate_seconds,
-                block_seconds,
-                args.min_threshold,
-                args.noise_multiplier,
-            )
-
-        print(f"Input sample rate: {input_sample_rate} Hz -> monitoring {SAMPLE_RATE} Hz PCM")
-        print("Speak now. Press Ctrl+C to stop.\n")
-
-        started_at = time.monotonic()
-        last_print_at = 0.0
-        while not stop_event.is_set():
-            if args.duration and time.monotonic() - started_at >= args.duration:
-                break
-            try:
-                raw_audio = audio_queue.get(timeout=0.1)
-            except queue.Empty:
-                continue
-            audio_bytes = resampler.process(raw_audio)
-            if not audio_bytes:
-                continue
-            now = time.monotonic()
-            if now - last_print_at < 0.2:
-                continue
-            level = rms_level(audio_bytes)
-            marker = "SPEECH" if level >= threshold else "quiet"
-            bar_length = min(50, int(level / 100))
-            print(f"RMS {level:7.1f} / threshold {threshold:7.1f} [{marker}] {'#' * bar_length}")
-            last_print_at = now
-
-    return 0
 
 
 def run_realtime_transcription(args: argparse.Namespace) -> int:
@@ -837,34 +620,14 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
     )
 
     with stream:
-        threshold = args.threshold
-        if threshold is None and args.local_noise_gate:
-            threshold = calibrate_noise(
-                audio_queue,
-                resampler,
-                args.calibrate_seconds,
-                block_seconds,
-                args.min_threshold,
-                args.noise_multiplier,
-            )
-        elif threshold is None:
-            threshold = 0.0
-
-        gate = NoiseGateState(
-            threshold=threshold,
-            silence_frames_to_commit=ms_to_frames(args.silence_ms, args.block_ms),
-            min_speech_frames=ms_to_frames(args.min_utterance_ms, args.block_ms),
-            max_speech_frames=max(1, math.ceil(args.max_segment_seconds / block_seconds)),
-            prefix_frames=ms_to_frames(args.prefix_ms, args.block_ms),
-            enabled=args.local_noise_gate,
-        )
+        max_segment_frames = max(1, math.ceil(args.max_segment_seconds / block_seconds))
 
         client = OpenAI()
         server_vad = should_use_server_vad(args)
         print(f"Input sample rate: {input_sample_rate} Hz -> streaming {SAMPLE_RATE} Hz PCM")
         print(
             f"Mode: {args.mode}; transcription model: {args.transcription_model}; "
-            f"cloud noise reduction: {args.noise_reduction}"
+            "cloud noise reduction: near_field"
         )
         if args.transcription_model == REALTIME_WHISPER_MODEL and args.prompt:
             print("Prompt note: gpt-realtime-whisper does not support prompts, so the prompt is ignored.")
@@ -888,7 +651,7 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
             )
             sender = threading.Thread(
                 target=audio_sender,
-                args=(connection, audio_queue, stop_event, resampler, gate, server_vad, args.debug),
+                args=(connection, audio_queue, stop_event, resampler, max_segment_frames, server_vad, args.debug),
                 daemon=True,
             )
             receiver.start()
@@ -925,8 +688,6 @@ def main() -> int:
     if args.list_devices:
         list_devices()
         return 0
-    if args.monitor_levels:
-        return monitor_levels(args)
 
     try:
         return run_realtime_transcription(args)
