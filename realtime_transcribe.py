@@ -187,7 +187,8 @@ class SimplificationState:
     completed: list[str] = field(default_factory=list)
     simplified: list[str] = field(default_factory=list)
     patient_heading_printed: bool = False
-    last_completed_at: float | None = None
+    speech_active: bool = False
+    last_speech_stopped_at: float | None = None
     simplified_until_count: int = 0
     lock: threading.Lock = field(default_factory=threading.Lock)
 
@@ -610,9 +611,9 @@ def simplify_after_pause_worker(
         now = time.monotonic()
 
         with state.lock:
-            if state.last_completed_at is None:
+            if state.speech_active or state.last_speech_stopped_at is None:
                 continue
-            quiet_for = now - state.last_completed_at
+            quiet_for = now - state.last_speech_stopped_at
             if quiet_for < args.simplify_pause_seconds:
                 continue
 
@@ -677,7 +678,6 @@ def receive_events(
         seen_transcripts.add(normalized)
         with state.lock:
             state.completed.append(text)
-            state.last_completed_at = time.monotonic()
         continuous_transcript = updated_transcript
         print(addition, end="", flush=True)
 
@@ -692,6 +692,14 @@ def receive_events(
                 print(f"\n[event] {event_type}")
             if event_type == "conversation.item.input_audio_transcription.delta":
                 continue
+            elif event_type == "input_audio_buffer.speech_started":
+                with state.lock:
+                    state.speech_active = True
+                    state.last_speech_stopped_at = None
+            elif event_type == "input_audio_buffer.speech_stopped":
+                with state.lock:
+                    state.speech_active = False
+                    state.last_speech_stopped_at = time.monotonic()
             elif event_type == "conversation.item.input_audio_transcription.segment":
                 if display_segments:
                     text = getattr(event, "text", "").strip()
@@ -803,14 +811,19 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
             wait_for_session_ready(connection, debug=args.debug)
             drain_audio_queue(audio_queue)
             print("Listening. Speak into the microphone. Press Ctrl+C to stop.\n")
-            if args.simplify_live:
+            simplify_after_vad_pause = args.simplify_live and server_vad
+            if simplify_after_vad_pause:
                 print(
                     "Patient simplification is enabled. "
-                    f"It updates after {args.simplify_pause_seconds:.1f}s pauses.\n"
+                    f"It updates {args.simplify_pause_seconds:.1f}s after OpenAI detects speech has stopped.\n"
+                )
+            elif args.simplify_live:
+                print(
+                    "Patient simplification is disabled because this model/mode does not provide server speech-stop events.\n"
                 )
 
             simplifier = None
-            if args.simplify_live:
+            if simplify_after_vad_pause:
                 simplifier = threading.Thread(
                     target=simplify_after_pause_worker,
                     args=(args, simplification_state, simplifier_stop_event, args.debug),
