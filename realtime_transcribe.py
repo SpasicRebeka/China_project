@@ -32,9 +32,6 @@ SAMPLE_RATE = 24_000
 CHANNELS = 1
 SAMPLE_WIDTH_BYTES = 2
 REALTIME_WHISPER_MODEL = "gpt-realtime-whisper"
-DEFAULT_MEDICAL_TRANSCRIPTION_PROMPT = (
-    "Medical vocabulary. Doctor to patient communication."
-)
 DEFAULT_SIMPLIFICATION_INSTRUCTIONS = (
     "Simplify doctor-patient speech for a patient display. First fix obvious punctuation "
     "and sentence-boundary errors. Then rewrite it in plain, short sentences for a "
@@ -217,7 +214,7 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument(
         "--prompt",
-        default=DEFAULT_MEDICAL_TRANSCRIPTION_PROMPT,
+        default=None,
         help=(
             "Prompt hint for medical dictation vocabulary. Used by realtime "
             "transcription models that support prompts."
