@@ -33,7 +33,7 @@ def get_openai_api_key() -> str | None:
 
 def get_text_model() -> str:
     """Return the OpenAI text model used for translation and simplification."""
-    return os.environ.get("LANGUAGE_MODEL", "gpt-5.6-luna")
+    return os.environ.get("LANGUAGE_MODEL", "gpt-5.6-terra")
 
 
 def get_transcription_model() -> str:

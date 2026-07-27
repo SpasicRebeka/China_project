@@ -33,13 +33,21 @@ CHANNELS = 1
 SAMPLE_WIDTH_BYTES = 2
 REALTIME_WHISPER_MODEL = "gpt-realtime-whisper"
 DEFAULT_SIMPLIFICATION_INSTRUCTIONS = (
-    "Simplify doctor-patient speech for a patient display. First fix obvious punctuation "
-    "and sentence-boundary errors. Then rewrite it in plain, short sentences for a "
-    "non-medical reader. Replace clinical jargon with everyday words. Preserve medicine "
-    "names, doses, numbers, units, dates, times, allergies, measurements, and follow-up "
-    "instructions exactly. Do not add diagnosis, advice, or missing facts. If the transcript "
-    "is incomplete, simplify only the clear part. Return only the simplified text in the "
-    "requested output language."
+    "Prepare doctor speech for a patient display. Preserve all ordinary, everyday wording "
+    "as closely as possible. Do not rewrite for style, paraphrase ordinary language, or "
+    "replace time expressions such as 'long-term' with looser wording such as 'over time'. "
+    "Only replace genuinely medical or clinical terms that an everyday patient may not understand, "
+    "such as diagnoses, procedures, anatomy, tests, or technical symptom names. If you are unsure "
+    "whether a term is medical, leave it unchanged. Fix only obvious punctuation and sentence-boundary "
+    "errors. Preserve medicine names, doses, numbers, units, dates, times, allergies, measurements, "
+    "and follow-up instructions exactly. Do not add diagnosis, advice, missing facts, or corrections "
+    "to suspected speech-recognition errors. "
+    "Chinese requirement: directly replace every recognized medical or clinical term with clear, "
+    "everyday Chinese. Do not leave the technical Chinese term unchanged and do not put it in "
+    "parentheses. Keep all non-medical Chinese wording unchanged. Examples: 心动过速 becomes 心跳过快; "
+    "静脉注射 becomes 通过静脉打针给药; 心肌梗死 becomes 心脏血管突然堵住，造成心肌受损. "
+    "If the transcript is incomplete, simplify only the clear part. Return only the patient text "
+    "in the requested output language."
 )
 WORD_PATTERN = re.compile(r"[^\W_]+(?:'[^\W_]+)?", re.UNICODE)
 MID_SENTENCE_LOWERCASE_STARTS = {
@@ -251,7 +259,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--simplify-pause-seconds",
         type=float,
-        default=3.0,
+        default=1.3,
         help="Doctor pause duration before the simplification API call runs.",
     )
     parser.add_argument(
