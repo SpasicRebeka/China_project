@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 from array import array
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import sounddevice as sd
@@ -19,8 +20,10 @@ from openai import OpenAI
 
 from config import (
     get_openai_api_key,
+    get_language_reasoning_effort,
     get_realtime_transcription_delay,
     get_realtime_transcription_model,
+    get_text_model,
     load_project_environment,
 )
 
@@ -31,6 +34,15 @@ SAMPLE_WIDTH_BYTES = 2
 REALTIME_WHISPER_MODEL = "gpt-realtime-whisper"
 DEFAULT_MEDICAL_TRANSCRIPTION_PROMPT = (
     "Medical vocabulary. Doctor to patient communication."
+)
+DEFAULT_SIMPLIFICATION_INSTRUCTIONS = (
+    "Simplify doctor-patient speech for a patient display. First fix obvious punctuation "
+    "and sentence-boundary errors. Then rewrite it in plain, short sentences for a "
+    "non-medical reader. Replace clinical jargon with everyday words. Preserve medicine "
+    "names, doses, numbers, units, dates, times, allergies, measurements, and follow-up "
+    "instructions exactly. Do not add diagnosis, advice, or missing facts. If the transcript "
+    "is incomplete, simplify only the clear part. Return only the simplified text in the "
+    "requested output language."
 )
 WORD_PATTERN = re.compile(r"[^\W_]+(?:'[^\W_]+)?", re.UNICODE)
 MID_SENTENCE_LOWERCASE_STARTS = {
@@ -168,6 +180,18 @@ class Pcm16MonoResampler:
         return output.tobytes()
 
 
+@dataclass
+class SimplificationState:
+    """Finalized transcript chunks waiting for patient-friendly simplification."""
+
+    completed: list[str] = field(default_factory=list)
+    simplified: list[str] = field(default_factory=list)
+    patient_heading_printed: bool = False
+    last_completed_at: float | None = None
+    simplified_until_count: int = 0
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Stream microphone audio to OpenAI realtime transcription."
@@ -208,6 +232,40 @@ def parse_arguments() -> argparse.Namespace:
         "-o",
         type=Path,
         help="Save completed transcript lines to this UTF-8 file.",
+    )
+    parser.add_argument(
+        "--simplified-output",
+        type=Path,
+        help="Save patient-friendly simplified text to this UTF-8 file.",
+    )
+    parser.add_argument(
+        "--simplify-live",
+        dest="simplify_live",
+        action="store_true",
+        help="Call OpenAI to simplify finalized transcript text after longer pauses.",
+    )
+    parser.add_argument(
+        "--no-simplify-live",
+        dest="simplify_live",
+        action="store_false",
+        help="Only show the direct realtime transcript.",
+    )
+    parser.add_argument(
+        "--simplify-pause-seconds",
+        type=float,
+        default=3.0,
+        help="Doctor pause duration before the simplification API call runs.",
+    )
+    parser.add_argument(
+        "--simplify-min-chars",
+        type=int,
+        default=12,
+        help="Minimum new finalized characters needed before simplification runs.",
+    )
+    parser.add_argument(
+        "--simplified-language",
+        default="same",
+        help="Output language for simplified text: same, en, zh, or another language name/code.",
     )
     parser.add_argument(
         "--delay",
@@ -256,6 +314,7 @@ def parse_arguments() -> argparse.Namespace:
         default=5.0,
         help="Wait this long for final transcripts after stopping.",
     )
+    parser.set_defaults(simplify_live=True)
     return parser.parse_args()
 
 
@@ -490,10 +549,114 @@ def join_transcript_parts(parts: list[str]) -> str:
     return transcript
 
 
+def build_reasoning_config() -> dict[str, str] | None:
+    effort = get_language_reasoning_effort()
+    if not effort:
+        return None
+    return {"effort": effort}
+
+
+def describe_patient_output_language(source_language: str, target_language: str) -> str:
+    normalized = target_language.strip().lower()
+    if normalized in {"", "same", "source"}:
+        return f"Use the same language as the doctor transcript. Source language setting: {source_language}."
+    if normalized in {"zh", "cn", "chinese", "mandarin"}:
+        return "Chinese"
+    if normalized in {"en", "english"}:
+        return "English"
+    return target_language
+
+
+def simplify_clinical_text(
+    client: OpenAI,
+    text: str,
+    source_language: str,
+    target_language: str,
+    model: str,
+    reasoning: dict[str, str] | None,
+) -> str:
+    """Call OpenAI directly to simplify finalized doctor speech for the patient."""
+    request = {
+        "model": model,
+        "max_output_tokens": 500,
+        "instructions": DEFAULT_SIMPLIFICATION_INSTRUCTIONS,
+        "input": (
+            f"Source language setting: {source_language}\n\n"
+            "Patient output language: "
+            f"{describe_patient_output_language(source_language, target_language)}\n\n"
+            f"Doctor transcript:\n{text}\n\n"
+            "Simplify this for the patient display."
+        ),
+    }
+    if reasoning:
+        request["reasoning"] = reasoning
+
+    response = client.responses.create(**request)
+    return response.output_text.strip()
+
+
+def simplify_after_pause_worker(
+    args: argparse.Namespace,
+    state: SimplificationState,
+    stop_event: threading.Event,
+    debug: bool = False,
+) -> None:
+    client: OpenAI | None = None
+    model = get_text_model()
+    reasoning = build_reasoning_config()
+
+    while not stop_event.is_set():
+        time.sleep(0.2)
+        now = time.monotonic()
+
+        with state.lock:
+            if state.last_completed_at is None:
+                continue
+            quiet_for = now - state.last_completed_at
+            if quiet_for < args.simplify_pause_seconds:
+                continue
+
+            end_count = len(state.completed)
+            pending_parts = state.completed[state.simplified_until_count:end_count]
+            pending_text = join_transcript_parts(pending_parts).strip()
+            if len(pending_text) < args.simplify_min_chars:
+                continue
+
+            state.simplified_until_count = end_count
+
+        if client is None:
+            client = OpenAI()
+
+        try:
+            simplified_text = simplify_clinical_text(
+                client=client,
+                text=pending_text,
+                source_language=args.language,
+                target_language=args.simplified_language,
+                model=model,
+                reasoning=reasoning,
+            )
+        except Exception as error:
+            print(f"\n\nSimplification failed: {error}\n", file=sys.stderr)
+            if debug:
+                print(f"[simplify input] {pending_text}", file=sys.stderr)
+            continue
+
+        if simplified_text:
+            with state.lock:
+                should_print_heading = not state.patient_heading_printed
+                state.patient_heading_printed = True
+                state.simplified.append(simplified_text)
+            if should_print_heading:
+                print(f"\n\nPatient simplified text:\n{simplified_text}", flush=True)
+            else:
+                print(simplified_text, flush=True)
+
+
 def receive_events(
     connection,
     stop_event: threading.Event,
-    completed: list[str],
+    state: SimplificationState,
     display_segments: bool = False,
     debug: bool = False,
 ) -> None:
@@ -512,7 +675,9 @@ def receive_events(
             return
 
         seen_transcripts.add(normalized)
-        completed.append(text)
+        with state.lock:
+            state.completed.append(text)
+            state.last_completed_at = time.monotonic()
         continuous_transcript = updated_transcript
         print(addition, end="", flush=True)
 
@@ -598,7 +763,8 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
     block_seconds = args.block_ms / 1000
     audio_queue: queue.Queue[bytes] = queue.Queue(maxsize=300)
     stop_event = threading.Event()
-    completed: list[str] = []
+    simplifier_stop_event = threading.Event()
+    simplification_state = SimplificationState()
 
     def request_stop(signum=None, frame=None) -> None:
         stop_event.set()
@@ -637,13 +803,27 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
             wait_for_session_ready(connection, debug=args.debug)
             drain_audio_queue(audio_queue)
             print("Listening. Speak into the microphone. Press Ctrl+C to stop.\n")
+            if args.simplify_live:
+                print(
+                    "Patient simplification is enabled. "
+                    f"It updates after {args.simplify_pause_seconds:.1f}s pauses.\n"
+                )
+
+            simplifier = None
+            if args.simplify_live:
+                simplifier = threading.Thread(
+                    target=simplify_after_pause_worker,
+                    args=(args, simplification_state, simplifier_stop_event, args.debug),
+                    daemon=True,
+                )
+                simplifier.start()
 
             receiver = threading.Thread(
                 target=receive_events,
                 args=(
                     connection,
                     stop_event,
-                    completed,
+                    simplification_state,
                     args.transcription_model == REALTIME_WHISPER_MODEL,
                     args.debug,
                 ),
@@ -669,6 +849,13 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
                 time.sleep(args.final_wait_seconds)
             connection.close()
             receiver.join(timeout=2)
+            simplifier_stop_event.set()
+            if simplifier:
+                simplifier.join(timeout=2)
+
+    with simplification_state.lock:
+        completed = list(simplification_state.completed)
+        simplified = list(simplification_state.simplified)
 
     if completed:
         print()
@@ -677,6 +864,11 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
         output_path = args.output.expanduser().resolve()
         output_path.write_text(join_transcript_parts(completed), encoding="utf-8")
         print(f"\nSaved transcript to: {output_path}")
+
+    if args.simplified_output:
+        simplified_path = args.simplified_output.expanduser().resolve()
+        simplified_path.write_text(join_transcript_parts(simplified), encoding="utf-8")
+        print(f"\nSaved simplified text to: {simplified_path}")
 
     return 0
 

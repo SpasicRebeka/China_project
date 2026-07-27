@@ -70,6 +70,14 @@ Use a specific microphone device index:
 
 The default realtime mode is `quiet-room`. It streams audio continuously and lets server voice activity detection commit complete doctor utterances after a short pause.
 
+To also call OpenAI for patient-friendly simplification after a longer pause:
+
+```powershell
+.\.venv\Scripts\python.exe .\realtime_transcribe.py --device 9 --language zh --simplify-pause-seconds 3.0 --simplified-language same
+```
+
+Use `--simplified-language en` if the simplified patient text should be English instead of the doctor's language.
+
 For a quiet doctor-patient room, start here:
 
 ```powershell
