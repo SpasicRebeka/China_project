@@ -70,6 +70,16 @@ Use a specific microphone device index:
 
 The default realtime mode is `quiet-room`. It streams audio continuously and lets server voice activity detection commit complete doctor utterances after a short pause.
 
+For the two-display workflow, the top panel shows the doctor's direct realtime transcript and the bottom panel shows patient-friendly simplified text. The simplification is an OpenAI text API call that runs only after a longer pause and replaces clinical jargon with plain language:
+
+```powershell
+.\.venv\Scripts\python.exe .\realtime_transcribe.py --device 9 --language zh --mode low-latency --transcription-model gpt-4o-mini-transcribe --max-segment-seconds 1.0 --simplify-pause-seconds 2.0
+```
+
+By default, the simplified patient text uses the same language as the doctor transcript. Add `--simplified-language en` if the patient display should be English, or `--simplified-language zh` if it should always be Chinese.
+
+Test `--simplify-pause-seconds 1.5`, `2.0`, and `3.0` to balance delay against complete, meaningful sentences.
+
 For a quiet doctor-patient room, start here:
 
 ```powershell

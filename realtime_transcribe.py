@@ -7,13 +7,15 @@ import base64
 import math
 import queue
 import re
+import shutil
 import signal
 import sys
 import threading
 import time
+import textwrap
 from array import array
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import sounddevice as sd
@@ -21,8 +23,10 @@ from openai import OpenAI
 
 from config import (
     get_openai_api_key,
+    get_language_reasoning_effort,
     get_realtime_transcription_delay,
     get_realtime_transcription_model,
+    get_text_model,
     load_project_environment,
 )
 
@@ -37,6 +41,15 @@ DEFAULT_MEDICAL_TRANSCRIPTION_PROMPT = (
     "blood pressure, heart rate, oxygen saturation, temperature, medication names, dosages, "
     "allergies, follow-up dates, and simple clinical instructions. Do not summarize, "
     "translate, explain, complete unfinished sentences, or add missing words."
+)
+DEFAULT_SIMPLIFICATION_INSTRUCTIONS = (
+    "Simplify doctor-patient speech for a patient display. Fix obvious punctuation "
+    "and sentence-boundary errors first. Then rewrite in plain, short sentences for "
+    "a non-medical reader. Replace clinical jargon with everyday words, but preserve "
+    "medicine names, doses, numbers, units, dates, times, allergies, measurements, "
+    "and follow-up instructions exactly. Do not add diagnosis, advice, or missing facts. "
+    "If the transcript is incomplete, simplify only the clear part. Return only the "
+    "simplified patient text in the requested output language."
 )
 WORD_PATTERN = re.compile(r"[^\W_]+(?:'[^\W_]+)?", re.UNICODE)
 MID_SENTENCE_LOWERCASE_STARTS = {
@@ -132,7 +145,7 @@ MID_SENTENCE_LOWERCASE_STARTS = {
     "you",
     "your",
 }
-SENTENCE_ENDINGS = ".!?。！？"
+SENTENCE_ENDINGS = ".!?\u3002\uff01\uff1f"
 
 
 class Pcm16MonoResampler:
@@ -190,6 +203,105 @@ class NoiseGateState:
     silent_frames: int = 0
 
 
+@dataclass
+class TranscriptState:
+    """Shared text state for direct captions and simplified patient text."""
+
+    raw_text: str = ""
+    confirmed_text: str = ""
+    simplified_text: str = ""
+    status: str = ""
+    last_completed_at: float | None = None
+    simplified_until_index: int = 0
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+
+class TranscriptDisplay:
+    """Console display for doctor realtime text plus patient simplification."""
+
+    def __init__(self, mode: str, max_lines: int = 9) -> None:
+        self.mode = mode
+        self.max_lines = max_lines
+        self.lock = threading.Lock()
+        self.last_rendered_at = 0.0
+
+    def show_doctor_delta(self, state: TranscriptState, text: str) -> None:
+        if not text:
+            return
+        with state.lock:
+            state.raw_text += text
+        self.render(state, appended_text=text)
+
+    def show_doctor_final(self, state: TranscriptState, text: str) -> None:
+        if not text:
+            return
+        with state.lock:
+            state.raw_text, addition = append_transcript_part(state.raw_text, text)
+        if addition:
+            self.render(state, appended_text=addition)
+
+    def show_patient_text(self, state: TranscriptState, text: str) -> None:
+        if not text:
+            return
+        with state.lock:
+            state.simplified_text += ("\n" if state.simplified_text else "") + text
+        self.render(state, patient_update=text, force=True)
+
+    def set_status(self, state: TranscriptState, status: str) -> None:
+        with state.lock:
+            state.status = status
+        self.render(state, force=True)
+
+    def render(
+        self,
+        state: TranscriptState,
+        appended_text: str = "",
+        patient_update: str = "",
+        force: bool = False,
+    ) -> None:
+        with self.lock:
+            if self.mode == "append":
+                if appended_text:
+                    print(appended_text, end="", flush=True)
+                if patient_update:
+                    print(f"\n\nPatient simplified:\n{patient_update}\n", flush=True)
+                return
+
+            now = time.monotonic()
+            if not force and now - self.last_rendered_at < 0.05:
+                return
+            self.last_rendered_at = now
+
+            with state.lock:
+                raw_text = state.raw_text
+                simplified_text = state.simplified_text or "Waiting for a longer pause..."
+                status = state.status
+
+            width = max(48, min(shutil.get_terminal_size((100, 30)).columns - 4, 120))
+            separator = "-" * min(width, 80)
+            doctor_lines = wrap_display_text(raw_text, width, self.max_lines)
+            patient_lines = wrap_display_text(simplified_text, width, self.max_lines)
+
+            output = [
+                "\033[2J\033[H",
+                "Doctor realtime transcription",
+                separator,
+                *doctor_lines,
+                "",
+                "Patient simplified text",
+                separator,
+                *patient_lines,
+                "",
+                status,
+            ]
+            print("\n".join(output), end="", flush=True)
+
+    def finish(self, state: TranscriptState) -> None:
+        if self.mode == "two-panel":
+            self.render(state, force=True)
+        print()
+
+
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Stream microphone audio to OpenAI realtime transcription."
@@ -230,6 +342,46 @@ def parse_arguments() -> argparse.Namespace:
         "-o",
         type=Path,
         help="Save completed transcript lines to this UTF-8 file.",
+    )
+    parser.add_argument(
+        "--simplified-output",
+        type=Path,
+        help="Save patient-friendly simplified text to this UTF-8 file.",
+    )
+    parser.add_argument(
+        "--simplify-live",
+        dest="simplify_live",
+        action="store_true",
+        help="Show patient-friendly simplified text after longer pauses.",
+    )
+    parser.add_argument(
+        "--no-simplify-live",
+        dest="simplify_live",
+        action="store_false",
+        help="Only show the doctor's realtime transcription.",
+    )
+    parser.add_argument(
+        "--simplify-pause-seconds",
+        type=float,
+        default=2.0,
+        help="Doctor pause duration before correcting and simplifying finalized speech.",
+    )
+    parser.add_argument(
+        "--simplify-min-chars",
+        type=int,
+        default=12,
+        help="Minimum new finalized characters needed before simplification runs.",
+    )
+    parser.add_argument(
+        "--simplified-language",
+        default="same",
+        help="Output language for patient text: same, en, zh, or another language code/name.",
+    )
+    parser.add_argument(
+        "--display",
+        choices=["two-panel", "append"],
+        default="two-panel",
+        help="two-panel separates doctor/patient text; append prints simple log-style output.",
     )
     parser.add_argument(
         "--delay",
@@ -329,7 +481,7 @@ def parse_arguments() -> argparse.Namespace:
         default=5.0,
         help="Wait this long for final transcripts after stopping.",
     )
-    parser.set_defaults(local_noise_gate=False)
+    parser.set_defaults(local_noise_gate=False, simplify_live=True)
     return parser.parse_args()
 
 
@@ -608,31 +760,160 @@ def join_transcript_parts(parts: list[str]) -> str:
     return transcript
 
 
+def wrap_display_text(text: str, width: int, max_lines: int) -> list[str]:
+    if not text:
+        return [""]
+
+    lines: list[str] = []
+    for paragraph in text.splitlines():
+        wrapped = textwrap.wrap(
+            paragraph,
+            width=width,
+            break_long_words=True,
+            break_on_hyphens=False,
+        )
+        lines.extend(wrapped or [""])
+    return lines[-max_lines:] or [""]
+
+
+def append_confirmed_transcript(state: TranscriptState, text: str) -> bool:
+    text = text.strip()
+    if not text:
+        return False
+
+    with state.lock:
+        updated_text, addition = append_transcript_part(state.confirmed_text, text)
+        if not addition:
+            return False
+        state.confirmed_text = updated_text
+        state.last_completed_at = time.monotonic()
+        return True
+
+
+def build_reasoning_config() -> dict[str, str] | None:
+    effort = get_language_reasoning_effort()
+    if not effort:
+        return None
+    return {"effort": effort}
+
+
+def describe_patient_output_language(source_language: str, target_language: str) -> str:
+    normalized = target_language.strip().lower()
+    if normalized in {"", "same", "source"}:
+        return f"Use the same language as the doctor transcript. Source language setting: {source_language}."
+    if normalized in {"zh", "cn", "chinese", "mandarin"}:
+        return "Chinese"
+    if normalized in {"en", "english"}:
+        return "English"
+    return target_language
+
+
+def simplify_clinical_text(
+    client: OpenAI,
+    text: str,
+    source_language: str,
+    target_language: str,
+    model: str,
+    reasoning: dict[str, str] | None,
+) -> str:
+    """Call OpenAI directly to create patient-friendly text for the second display."""
+    request = {
+        "model": model,
+        "max_output_tokens": 500,
+        "instructions": DEFAULT_SIMPLIFICATION_INSTRUCTIONS,
+        "input": (
+            f"Source language setting: {source_language}\n\n"
+            "Patient output language: "
+            f"{describe_patient_output_language(source_language, target_language)}\n\n"
+            f"Doctor transcript:\n{text}\n\n"
+            "Simplify this for the patient display."
+        ),
+    }
+    if reasoning:
+        request["reasoning"] = reasoning
+
+    response = client.responses.create(**request)
+    return response.output_text.strip()
+
+
+def simplify_after_pause_worker(
+    args: argparse.Namespace,
+    state: TranscriptState,
+    display: TranscriptDisplay,
+    stop_event: threading.Event,
+    debug: bool = False,
+) -> None:
+    client: OpenAI | None = None
+    model = get_text_model()
+    reasoning = build_reasoning_config()
+
+    while not stop_event.is_set():
+        time.sleep(0.2)
+        now = time.monotonic()
+
+        with state.lock:
+            if state.last_completed_at is None:
+                continue
+
+            quiet_for = now - state.last_completed_at
+            if quiet_for < args.simplify_pause_seconds:
+                continue
+
+            end_index = len(state.confirmed_text)
+            pending_text = state.confirmed_text[state.simplified_until_index:end_index].strip()
+            if len(pending_text) < args.simplify_min_chars:
+                continue
+
+            # Mark this range before the API call so a slow simplification does
+            # not start duplicate requests for the same doctor utterance.
+            state.simplified_until_index = end_index
+
+        if client is None:
+            client = OpenAI()
+
+        display.set_status(state, f"Simplifying after {quiet_for:.1f}s pause...")
+        try:
+            patient_text = simplify_clinical_text(
+                client=client,
+                text=pending_text,
+                source_language=args.language,
+                target_language=args.simplified_language,
+                model=model,
+                reasoning=reasoning,
+            )
+        except Exception as error:
+            display.set_status(state, f"Simplification failed: {error}")
+            if debug:
+                print(f"\nSimplification failed: {error}", file=sys.stderr)
+            continue
+
+        patient_text = patient_text.strip()
+        if patient_text:
+            display.show_patient_text(state, patient_text)
+        display.set_status(state, "Listening for doctor speech...")
+
+
 def receive_events(
     connection,
     stop_event: threading.Event,
-    completed: list[str],
+    state: TranscriptState,
+    display: TranscriptDisplay,
     display_segments: bool = False,
     debug: bool = False,
 ) -> None:
     seen_transcripts: set[str] = set()
-    continuous_transcript = ""
+    saw_delta_since_final = False
 
     def show_transcript(text: str) -> None:
-        nonlocal continuous_transcript
         text = text.strip()
         normalized = " ".join(text.split())
         if not normalized or normalized in seen_transcripts:
             return
 
-        updated_transcript, addition = append_transcript_part(continuous_transcript, text)
-        if not addition:
+        if not append_confirmed_transcript(state, text):
             return
 
         seen_transcripts.add(normalized)
-        completed.append(text)
-        continuous_transcript = updated_transcript
-        print(addition, end="", flush=True)
 
     try:
         for event in connection:
@@ -644,14 +925,22 @@ def receive_events(
             }:
                 print(f"\n[event] {event_type}")
             if event_type == "conversation.item.input_audio_transcription.delta":
-                continue
+                delta = getattr(event, "delta", None)
+                if delta:
+                    display.show_doctor_delta(state, delta)
+                    saw_delta_since_final = True
             elif event_type == "conversation.item.input_audio_transcription.segment":
                 if display_segments:
                     text = getattr(event, "text", "").strip()
+                    display.show_doctor_final(state, text)
                     show_transcript(text)
+                    saw_delta_since_final = False
             elif event_type == "conversation.item.input_audio_transcription.completed":
                 transcript = getattr(event, "transcript", "").strip()
+                if not saw_delta_since_final:
+                    display.show_doctor_final(state, transcript)
                 show_transcript(transcript)
+                saw_delta_since_final = False
             elif event_type == "conversation.item.input_audio_transcription.failed":
                 error = getattr(event, "error", None)
                 print(f"\nTranscription failed: {error}", file=sys.stderr)
@@ -815,7 +1104,9 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
     block_seconds = args.block_ms / 1000
     audio_queue: queue.Queue[bytes] = queue.Queue(maxsize=300)
     stop_event = threading.Event()
-    completed: list[str] = []
+    simplifier_stop_event = threading.Event()
+    transcript_state = TranscriptState()
+    display = TranscriptDisplay("append" if args.debug else args.display)
 
     def request_stop(signum=None, frame=None) -> None:
         stop_event.set()
@@ -874,13 +1165,36 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
             wait_for_session_ready(connection, debug=args.debug)
             drain_audio_queue(audio_queue)
             print("Listening. Speak into the microphone. Press Ctrl+C to stop.\n")
+            if args.simplify_live:
+                display.set_status(
+                    transcript_state,
+                    f"Listening. Patient text updates after {args.simplify_pause_seconds:.1f}s pause.",
+                )
+            else:
+                display.set_status(transcript_state, "Listening. Patient simplification is disabled.")
+
+            simplifier = None
+            if args.simplify_live:
+                simplifier = threading.Thread(
+                    target=simplify_after_pause_worker,
+                    args=(
+                        args,
+                        transcript_state,
+                        display,
+                        simplifier_stop_event,
+                        args.debug,
+                    ),
+                    daemon=True,
+                )
+                simplifier.start()
 
             receiver = threading.Thread(
                 target=receive_events,
                 args=(
                     connection,
                     stop_event,
-                    completed,
+                    transcript_state,
+                    display,
                     args.transcription_model == REALTIME_WHISPER_MODEL,
                     args.debug,
                 ),
@@ -906,14 +1220,25 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
                 time.sleep(args.final_wait_seconds)
             connection.close()
             receiver.join(timeout=2)
+            simplifier_stop_event.set()
+            if simplifier:
+                simplifier.join(timeout=2)
 
-    if completed:
-        print()
+    display.finish(transcript_state)
 
     if args.output:
         output_path = args.output.expanduser().resolve()
-        output_path.write_text(join_transcript_parts(completed), encoding="utf-8")
+        with transcript_state.lock:
+            output_text = transcript_state.confirmed_text
+        output_path.write_text(output_text, encoding="utf-8")
         print(f"\nSaved transcript to: {output_path}")
+
+    if args.simplified_output:
+        simplified_path = args.simplified_output.expanduser().resolve()
+        with transcript_state.lock:
+            simplified_text = transcript_state.simplified_text
+        simplified_path.write_text(simplified_text, encoding="utf-8")
+        print(f"\nSaved simplified text to: {simplified_path}")
 
     return 0
 
