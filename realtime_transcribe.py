@@ -306,8 +306,14 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument(
         "--block-ms",
         type=int,
-        default=20,
-        help="Microphone chunk size in milliseconds. Lower can reduce latency.",
+        default=50,
+        help="Microphone chunk size in milliseconds. Lower can reduce latency; higher is more stable.",
+    )
+    parser.add_argument(
+        "--input-latency",
+        choices=["low", "high"],
+        default="high",
+        help="Local microphone driver latency. High is safer for USB microphones and Raspberry Pi.",
     )
     parser.add_argument(
         "--debug",
@@ -319,6 +325,12 @@ def parse_arguments() -> argparse.Namespace:
         type=float,
         default=5.0,
         help="Wait this long for final transcripts after stopping.",
+    )
+    parser.add_argument(
+        "--api-timeout-seconds",
+        type=float,
+        default=120.0,
+        help="OpenAI API timeout in seconds. Increase this on slow Raspberry Pi or weak networks.",
     )
     parser.set_defaults(simplify_live=True)
     return parser.parse_args()
@@ -631,7 +643,7 @@ def simplify_after_pause_worker(
             state.simplified_until_count = end_count
 
         if client is None:
-            client = OpenAI()
+            client = OpenAI(timeout=args.api_timeout_seconds)
 
         try:
             simplified_text = simplify_clinical_text(
@@ -795,12 +807,14 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
         channels=CHANNELS,
         dtype="int16",
         device=device,
+        latency=args.input_latency,
         callback=callback,
     )
 
     with stream:
         max_segment_frames = max(1, math.ceil(args.max_segment_seconds / block_seconds))
 
+<<<<<<< Updated upstream
         client = OpenAI()
         server_vad = should_use_server_vad(args)
         print(f"Input sample rate: {input_sample_rate} Hz -> streaming {SAMPLE_RATE} Hz PCM")
@@ -826,6 +840,33 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
                 print(
                     "Patient simplification is disabled because this model/mode does not provide server speech-stop events.\n"
                 )
+=======
+    client = OpenAI(timeout=args.api_timeout_seconds)
+    server_vad = should_use_server_vad(args)
+    print(f"Input sample rate: {input_sample_rate} Hz -> streaming {SAMPLE_RATE} Hz PCM")
+    print(f"Microphone block: {args.block_ms} ms; input latency: {args.input_latency}")
+    print(
+        f"Mode: {args.mode}; transcription model: {args.transcription_model}; "
+        "cloud noise reduction: near_field"
+    )
+    if args.transcription_model == REALTIME_WHISPER_MODEL and args.prompt:
+        print("Prompt note: gpt-realtime-whisper does not support prompts, so the prompt is ignored.")
+    print("Connecting to realtime transcription...")
+    with client.realtime.connect(extra_query={"intent": "transcription"}) as connection:
+        connection.send(build_session_update(args))
+        wait_for_session_ready(connection, debug=args.debug)
+        print("Listening. Speak into the microphone. Press Ctrl+C to stop.\n")
+        simplify_after_vad_pause = args.simplify_live and server_vad
+        if simplify_after_vad_pause:
+            print(
+                "Patient simplification is enabled. "
+                f"It updates {args.simplify_pause_seconds:.1f}s after OpenAI detects speech has stopped.\n"
+            )
+        elif args.simplify_live:
+            print(
+                "Patient simplification is disabled because this model/mode does not provide server speech-stop events.\n"
+            )
+>>>>>>> Stashed changes
 
             simplifier = None
             if simplify_after_vad_pause:
@@ -860,6 +901,18 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
                 if args.duration and time.monotonic() - started_at >= args.duration:
                     stop_event.set()
                     break
+<<<<<<< Updated upstream
+=======
+                if audio_warning_event.is_set():
+                    audio_warning_event.clear()
+                    if now - last_audio_warning_at >= 5.0:
+                        print(
+                            "\nAudio warning: microphone input overflow; some audio was dropped. "
+                            "Try a larger --block-ms value (for example 100).",
+                            file=sys.stderr,
+                        )
+                        last_audio_warning_at = now
+>>>>>>> Stashed changes
                 time.sleep(0.05)
 
             sender.join(timeout=2)
