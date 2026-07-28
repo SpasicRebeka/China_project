@@ -381,10 +381,16 @@ def should_use_server_vad(args: argparse.Namespace) -> bool:
     return args.mode == "quiet-room" and args.transcription_model != REALTIME_WHISPER_MODEL
 
 
-def audio_callback_factory(audio_queue: queue.Queue[bytes], stop_event: threading.Event):
+def audio_callback_factory(
+    audio_queue: queue.Queue[bytes],
+    stop_event: threading.Event,
+    audio_warning_event: threading.Event,
+):
     def callback(indata, frames, time_info, status) -> None:
         if status:
-            print(f"\nAudio warning: {status}", file=sys.stderr)
+            # PortAudio invokes this on its real-time callback thread. Printing or
+            # doing other blocking work here can itself cause further overflows.
+            audio_warning_event.set()
         if stop_event.is_set():
             return
         try:
@@ -426,14 +432,6 @@ def wait_for_session_ready(connection, debug: bool = False) -> None:
             return
         if event_type == "error":
             raise RuntimeError(getattr(event, "error", event))
-
-
-def drain_audio_queue(audio_queue: queue.Queue[bytes]) -> None:
-    while True:
-        try:
-            audio_queue.get_nowait()
-        except queue.Empty:
-            return
 
 
 def transcript_separator(current_text: str, next_text: str) -> str:
@@ -777,6 +775,7 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
     audio_queue: queue.Queue[bytes] = queue.Queue(maxsize=300)
     stop_event = threading.Event()
     simplifier_stop_event = threading.Event()
+    audio_warning_event = threading.Event()
     simplification_state = SimplificationState()
 
     def request_stop(signum=None, frame=None) -> None:
@@ -788,7 +787,7 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
     input_sample_rate = get_input_sample_rate(device)
     blocksize = int(input_sample_rate * (args.block_ms / 1000))
     resampler = Pcm16MonoResampler(source_rate=input_sample_rate, target_rate=SAMPLE_RATE)
-    callback = audio_callback_factory(audio_queue, stop_event)
+    callback = audio_callback_factory(audio_queue, stop_event, audio_warning_event)
     stream = sd.RawInputStream(
         samplerate=input_sample_rate,
         blocksize=blocksize,
@@ -798,78 +797,91 @@ def run_realtime_transcription(args: argparse.Namespace) -> int:
         callback=callback,
     )
 
-    with stream:
-        max_segment_frames = max(1, math.ceil(args.max_segment_seconds / block_seconds))
+    max_segment_frames = max(1, math.ceil(args.max_segment_seconds / block_seconds))
 
-        client = OpenAI()
-        server_vad = should_use_server_vad(args)
-        print(f"Input sample rate: {input_sample_rate} Hz -> streaming {SAMPLE_RATE} Hz PCM")
-        print(
-            f"Mode: {args.mode}; transcription model: {args.transcription_model}; "
-            "cloud noise reduction: near_field"
+    client = OpenAI()
+    server_vad = should_use_server_vad(args)
+    print(f"Input sample rate: {input_sample_rate} Hz -> streaming {SAMPLE_RATE} Hz PCM")
+    print(
+        f"Mode: {args.mode}; transcription model: {args.transcription_model}; "
+        "cloud noise reduction: near_field"
+    )
+    if args.transcription_model == REALTIME_WHISPER_MODEL and args.prompt:
+        print("Prompt note: gpt-realtime-whisper does not support prompts, so the prompt is ignored.")
+    print("Connecting to realtime transcription...")
+    with client.realtime.connect(extra_query={"intent": "transcription"}) as connection:
+        connection.send(build_session_update(args))
+        wait_for_session_ready(connection, debug=args.debug)
+        print("Listening. Speak into the microphone. Press Ctrl+C to stop.\n")
+        simplify_after_vad_pause = args.simplify_live and server_vad
+        if simplify_after_vad_pause:
+            print(
+                "Patient simplification is enabled. "
+                f"It updates {args.simplify_pause_seconds:.1f}s after OpenAI detects speech has stopped.\n"
+            )
+        elif args.simplify_live:
+            print(
+                "Patient simplification is disabled because this model/mode does not provide server speech-stop events.\n"
+            )
+
+        simplifier = None
+        if simplify_after_vad_pause:
+            simplifier = threading.Thread(
+                target=simplify_after_pause_worker,
+                args=(args, simplification_state, simplifier_stop_event, args.debug),
+                daemon=True,
+            )
+            simplifier.start()
+
+        receiver = threading.Thread(
+            target=receive_events,
+            args=(
+                connection,
+                stop_event,
+                simplification_state,
+                args.transcription_model == REALTIME_WHISPER_MODEL,
+                args.debug,
+            ),
+            daemon=True,
         )
-        if args.transcription_model == REALTIME_WHISPER_MODEL and args.prompt:
-            print("Prompt note: gpt-realtime-whisper does not support prompts, so the prompt is ignored.")
-        print("Connecting to realtime transcription...")
-        with client.realtime.connect(extra_query={"intent": "transcription"}) as connection:
-            connection.send(build_session_update(args))
-            wait_for_session_ready(connection, debug=args.debug)
-            drain_audio_queue(audio_queue)
-            print("Listening. Speak into the microphone. Press Ctrl+C to stop.\n")
-            simplify_after_vad_pause = args.simplify_live and server_vad
-            if simplify_after_vad_pause:
-                print(
-                    "Patient simplification is enabled. "
-                    f"It updates {args.simplify_pause_seconds:.1f}s after OpenAI detects speech has stopped.\n"
-                )
-            elif args.simplify_live:
-                print(
-                    "Patient simplification is disabled because this model/mode does not provide server speech-stop events.\n"
-                )
+        sender = threading.Thread(
+            target=audio_sender,
+            args=(connection, audio_queue, stop_event, resampler, max_segment_frames, server_vad, args.debug),
+            daemon=True,
+        )
+        receiver.start()
+        sender.start()
 
-            simplifier = None
-            if simplify_after_vad_pause:
-                simplifier = threading.Thread(
-                    target=simplify_after_pause_worker,
-                    args=(args, simplification_state, simplifier_stop_event, args.debug),
-                    daemon=True,
-                )
-                simplifier.start()
-
-            receiver = threading.Thread(
-                target=receive_events,
-                args=(
-                    connection,
-                    stop_event,
-                    simplification_state,
-                    args.transcription_model == REALTIME_WHISPER_MODEL,
-                    args.debug,
-                ),
-                daemon=True,
-            )
-            sender = threading.Thread(
-                target=audio_sender,
-                args=(connection, audio_queue, stop_event, resampler, max_segment_frames, server_vad, args.debug),
-                daemon=True,
-            )
-            receiver.start()
-            sender.start()
-
+        # Start capture only after the remote session and worker threads are
+        # ready. This avoids accumulating/loss of audio during TLS/WebSocket
+        # setup, which commonly produces startup overflows on Raspberry Pi.
+        with stream:
             started_at = time.monotonic()
+            last_audio_warning_at = 0.0
             while not stop_event.is_set():
-                if args.duration and time.monotonic() - started_at >= args.duration:
+                now = time.monotonic()
+                if args.duration and now - started_at >= args.duration:
                     stop_event.set()
                     break
+                if audio_warning_event.is_set():
+                    audio_warning_event.clear()
+                    if now - last_audio_warning_at >= 5.0:
+                        print(
+                            "\nAudio warning: microphone input overflow; some audio was dropped. "
+                            "Try a larger --block-ms value (for example 50).",
+                            file=sys.stderr,
+                        )
+                        last_audio_warning_at = now
                 time.sleep(0.05)
 
-            sender.join(timeout=2)
-            if args.final_wait_seconds > 0:
-                time.sleep(args.final_wait_seconds)
-            connection.close()
-            receiver.join(timeout=2)
-            simplifier_stop_event.set()
-            if simplifier:
-                simplifier.join(timeout=2)
+        sender.join(timeout=2)
+        if args.final_wait_seconds > 0:
+            time.sleep(args.final_wait_seconds)
+        connection.close()
+        receiver.join(timeout=2)
+        simplifier_stop_event.set()
+        if simplifier:
+            simplifier.join(timeout=2)
 
     with simplification_state.lock:
         completed = list(simplification_state.completed)
