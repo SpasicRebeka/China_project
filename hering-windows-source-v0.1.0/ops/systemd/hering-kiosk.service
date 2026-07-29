@@ -1,0 +1,17 @@
+[Unit]
+Description=Hering dual-screen medical interview kiosk
+After=graphical-session.target network.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/hering
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=%h/.Xauthority
+ExecStart=/usr/bin/bash %h/hering/ops/kiosk/start-kiosk.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+

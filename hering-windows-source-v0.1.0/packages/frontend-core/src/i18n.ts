@@ -1,0 +1,93 @@
+import i18n from 'i18next'
+import { initReactI18next } from 'react-i18next'
+
+const resources = {
+  'zh-CN': {
+    translation: {
+      brand: '医语桥',
+      subtitle: '听障医疗结构化问诊终端',
+      doctor: '医生端',
+      patient: '患者端',
+      connected: '连接正常',
+      connecting: '正在连接',
+      disconnected: '连接已断开',
+      missingSession: '等待问诊会话',
+      missingSessionHint: '请由医生端启动本次问诊，或使用系统生成的患者端链接。',
+      ready: '通信空壳已就绪',
+      readyHint: '当前仅验证双端连接，不包含医疗问诊或诊断功能。',
+      session: '会话',
+      sendTest: '发送连接测试',
+      lastEvent: '最近消息',
+      noEvent: '尚未收到消息',
+      patientLink: '患者端启动链接',
+      copyLink: '复制链接',
+      copied: '已复制',
+      creating: '正在创建本机会话…',
+      createFailed: '无法创建本机会话，请确认服务端已启动。',
+      privacy: '仅在本机处理 · 不提供诊断结论',
+      language: '语言',
+    },
+  },
+  'zh-TW': {
+    translation: {
+      brand: '醫語橋',
+      subtitle: '聽障醫療結構化問診終端',
+      doctor: '醫生端',
+      patient: '患者端',
+      connected: '連線正常',
+      connecting: '正在連線',
+      disconnected: '連線已中斷',
+      missingSession: '等待問診工作階段',
+      missingSessionHint: '請由醫生端啟動本次問診，或使用系統產生的患者端連結。',
+      ready: '通訊空殼已就緒',
+      readyHint: '目前僅驗證雙端連線，不包含醫療問診或診斷功能。',
+      session: '工作階段',
+      sendTest: '傳送連線測試',
+      lastEvent: '最近訊息',
+      noEvent: '尚未收到訊息',
+      patientLink: '患者端啟動連結',
+      copyLink: '複製連結',
+      copied: '已複製',
+      creating: '正在建立本機工作階段…',
+      createFailed: '無法建立本機工作階段，請確認服務端已啟動。',
+      privacy: '僅在本機處理 · 不提供診斷結論',
+      language: '語言',
+    },
+  },
+  'en-US': {
+    translation: {
+      brand: 'MediBridge',
+      subtitle: 'Structured interview terminal for deaf and hard-of-hearing patients',
+      doctor: 'Clinician screen',
+      patient: 'Patient screen',
+      connected: 'Connected',
+      connecting: 'Connecting',
+      disconnected: 'Disconnected',
+      missingSession: 'Waiting for a consultation',
+      missingSessionHint: 'Start the consultation on the clinician screen or use the generated patient link.',
+      ready: 'Communication shell is ready',
+      readyHint: 'This build only verifies the two-screen connection. It does not provide clinical interviews or diagnoses.',
+      session: 'Session',
+      sendTest: 'Send connection test',
+      lastEvent: 'Latest message',
+      noEvent: 'No message received yet',
+      patientLink: 'Patient launch link',
+      copyLink: 'Copy link',
+      copied: 'Copied',
+      creating: 'Creating a local session…',
+      createFailed: 'Could not create a local session. Make sure the API is running.',
+      privacy: 'Processed on this device · No diagnosis provided',
+      language: 'Language',
+    },
+  },
+} as const
+
+void i18n.use(initReactI18next).init({
+  resources,
+  lng: 'zh-CN',
+  fallbackLng: 'zh-CN',
+  interpolation: { escapeValue: false },
+})
+
+export { i18n }
+

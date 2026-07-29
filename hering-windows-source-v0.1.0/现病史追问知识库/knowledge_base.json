@@ -1,0 +1,564 @@
+{
+  "kb_version": "0.1.0",
+  "metadata": {
+    "title": "成人现病史追问知识库（听障患者中英双语首版）",
+    "population": "adults_18_plus",
+    "language": ["zh-CN", "en"],
+    "intended_use": ["doctor_guided_followup", "patient_visual_selection", "draft_hpi_generation", "clinician_red_flag_display"],
+    "excluded_use": ["diagnosis", "risk_probability", "test_recommendation", "treatment_recommendation", "autonomous_triage"],
+    "max_association_depth": 1,
+    "review_status": "research_prototype_requires_local_clinical_review",
+    "source_review_date": "2026-07-24"
+  },
+  "response_sets": {
+    "presence_v1": [
+      { "code": "present", "label": { "zh": "有", "en": "Yes" } },
+      { "code": "absent", "label": { "zh": "没有", "en": "No" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } },
+      { "code": "unable_to_express", "label": { "zh": "无法表达", "en": "Unable to describe" } }
+    ],
+    "current_status_v1": [
+      { "code": "present", "label": { "zh": "现在还有", "en": "Present now" } },
+      { "code": "not_present", "label": { "zh": "现在没有", "en": "Not present now" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } },
+      { "code": "unable_to_express", "label": { "zh": "无法表达", "en": "Unable to describe" } }
+    ],
+    "progression_v1": [
+      { "code": "improving", "label": { "zh": "比开始时减轻", "en": "Getting better" } },
+      { "code": "stable", "label": { "zh": "变化不大", "en": "About the same" } },
+      { "code": "worsening", "label": { "zh": "比开始时加重", "en": "Getting worse" } },
+      { "code": "fluctuating", "label": { "zh": "时轻时重", "en": "Fluctuates" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } }
+    ],
+    "functional_impact_v1": [
+      { "code": "none", "label": { "zh": "不影响日常活动", "en": "No effect on daily activities" } },
+      { "code": "mild", "label": { "zh": "能活动，但比平时困难", "en": "Can function, but with difficulty" } },
+      { "code": "moderate", "label": { "zh": "需要减少部分活动", "en": "Have to reduce some activities" } },
+      { "code": "severe", "label": { "zh": "大部分活动做不了", "en": "Unable to do most activities" } },
+      { "code": "unable_to_express", "label": { "zh": "无法表达", "en": "Unable to describe" } }
+    ],
+    "temporal_relation_v1": [
+      { "code": "before", "label": { "zh": "在主症状之前出现", "en": "Started before the main symptom" } },
+      { "code": "same_time", "label": { "zh": "和主症状同时出现", "en": "Started at the same time" } },
+      { "code": "after", "label": { "zh": "在主症状之后出现", "en": "Started after the main symptom" } },
+      { "code": "unrelated_timing", "label": { "zh": "时间上没有明显关系", "en": "No clear timing relationship" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } }
+    ]
+  },
+  "value_sets": {
+    "frequency_v1": [
+      { "code": "once", "label": { "zh": "只出现过一次", "en": "Occurred once" } },
+      { "code": "less_than_daily", "label": { "zh": "不是每天都有", "en": "Less than daily" } },
+      { "code": "daily", "label": { "zh": "每天都有", "en": "Daily" } },
+      { "code": "many_times_daily", "label": { "zh": "每天多次", "en": "Many times a day" } },
+      { "code": "continuous", "label": { "zh": "一直存在", "en": "Continuous" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } }
+    ],
+    "pain_character_v1": [
+      { "code": "pressure", "label": { "zh": "像被压住或发紧", "en": "Pressure or tightness" } },
+      { "code": "squeezing", "label": { "zh": "挤压或勒紧", "en": "Squeezing" } },
+      { "code": "heavy", "label": { "zh": "沉重", "en": "Heavy" } },
+      { "code": "burning", "label": { "zh": "烧灼", "en": "Burning" } },
+      { "code": "sharp", "label": { "zh": "针扎或尖锐痛", "en": "Sharp or stabbing" } },
+      { "code": "tearing", "label": { "zh": "撕裂样", "en": "Tearing or ripping" } },
+      { "code": "dull", "label": { "zh": "隐痛或闷痛", "en": "Dull ache" } },
+      { "code": "other", "label": { "zh": "其他感觉", "en": "Another feeling" } },
+      { "code": "unable_to_express", "label": { "zh": "无法表达", "en": "Unable to describe" } }
+    ],
+    "abdominal_character_v1": [
+      { "code": "cramping", "label": { "zh": "一阵一阵绞痛", "en": "Cramping or colicky" } },
+      { "code": "burning", "label": { "zh": "烧灼痛", "en": "Burning" } },
+      { "code": "sharp", "label": { "zh": "尖锐或刀割样", "en": "Sharp or cutting" } },
+      { "code": "dull", "label": { "zh": "隐痛或闷痛", "en": "Dull ache" } },
+      { "code": "bloating", "label": { "zh": "胀痛", "en": "Bloating or distension" } },
+      { "code": "tearing", "label": { "zh": "撕裂样", "en": "Tearing" } },
+      { "code": "other", "label": { "zh": "其他", "en": "Other" } },
+      { "code": "unable_to_express", "label": { "zh": "无法表达", "en": "Unable to describe" } }
+    ],
+    "dizziness_experience_v1": [
+      { "code": "spinning", "label": { "zh": "自己或周围在转", "en": "You or the room is spinning" } },
+      { "code": "near_faint", "label": { "zh": "眼前发黑，像要晕倒", "en": "Feel faint or about to pass out" } },
+      { "code": "imbalance", "label": { "zh": "站不稳或走路偏", "en": "Unsteady or off balance" } },
+      { "code": "lightheaded", "label": { "zh": "头昏、飘或不清醒", "en": "Lightheaded or foggy" } },
+      { "code": "unable_to_express", "label": { "zh": "无法表达", "en": "Unable to describe" } }
+    ],
+    "chest_body_map": [
+      { "code": "central_sternum", "label": { "zh": "胸骨中央", "en": "Centre of the chest" } },
+      { "code": "left_chest", "label": { "zh": "左胸", "en": "Left chest" } },
+      { "code": "right_chest", "label": { "zh": "右胸", "en": "Right chest" } },
+      { "code": "whole_chest", "label": { "zh": "整个胸部", "en": "Whole chest" } },
+      { "code": "upper_abdomen", "label": { "zh": "上腹部或心窝", "en": "Upper abdomen" } },
+      { "code": "cannot_locate", "label": { "zh": "说不清具体位置", "en": "Cannot locate it" } }
+    ],
+    "chest_radiation_map": [
+      { "code": "left_arm", "label": { "zh": "左臂", "en": "Left arm" } },
+      { "code": "right_arm", "label": { "zh": "右臂", "en": "Right arm" } },
+      { "code": "both_arms", "label": { "zh": "双臂", "en": "Both arms" } },
+      { "code": "shoulder", "label": { "zh": "肩部", "en": "Shoulder" } },
+      { "code": "neck_jaw", "label": { "zh": "颈部或下颌", "en": "Neck or jaw" } },
+      { "code": "back", "label": { "zh": "背部", "en": "Back" } },
+      { "code": "upper_abdomen", "label": { "zh": "上腹部", "en": "Upper abdomen" } },
+      { "code": "none", "label": { "zh": "不扩散", "en": "Does not spread" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } }
+    ],
+    "sudden_gradual_unknown": [
+      { "code": "sudden_maximal", "label": { "zh": "突然出现，很快达到最重", "en": "Sudden and quickly at its worst" } },
+      { "code": "sudden_not_maximal", "label": { "zh": "突然出现，但不是立刻最重", "en": "Sudden, but not immediately at its worst" } },
+      { "code": "gradual", "label": { "zh": "慢慢出现或加重", "en": "Gradual onset or build-up" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } }
+    ],
+    "chest_triggers": [
+      { "code": "exercise", "label": { "zh": "走路、爬楼或运动", "en": "Walking, stairs, or exercise" } },
+      { "code": "emotional_stress", "label": { "zh": "紧张或情绪激动", "en": "Stress or strong emotion" } },
+      { "code": "deep_breath_cough", "label": { "zh": "深呼吸或咳嗽", "en": "Deep breathing or coughing" } },
+      { "code": "lying_or_position", "label": { "zh": "躺下或改变姿势", "en": "Lying down or changing position" } },
+      { "code": "after_meals", "label": { "zh": "吃饭后", "en": "After meals" } },
+      { "code": "touch_or_movement", "label": { "zh": "按压胸部或转动身体", "en": "Pressing the chest or moving the body" } },
+      { "code": "at_rest", "label": { "zh": "休息时也会出现", "en": "Occurs even at rest" } },
+      { "code": "no_clear_trigger", "label": { "zh": "没有明显诱因", "en": "No clear trigger" } }
+    ],
+    "chest_relievers": [
+      { "code": "rest", "label": { "zh": "休息", "en": "Rest" } },
+      { "code": "change_position", "label": { "zh": "改变姿势", "en": "Changing position" } },
+      { "code": "medication", "label": { "zh": "用药后", "en": "After medication" } },
+      { "code": "belching", "label": { "zh": "打嗝后", "en": "After belching" } },
+      { "code": "nothing", "label": { "zh": "没有什么能缓解", "en": "Nothing helps" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } }
+    ],
+    "chest_tightness_feelings": [
+      { "code": "pressure", "label": { "zh": "像被压住或很沉", "en": "Pressure or heaviness" } },
+      { "code": "tight_squeezing", "label": { "zh": "像被勒紧或挤压", "en": "Tight or squeezing" } },
+      { "code": "fullness", "label": { "zh": "胸口胀满", "en": "Fullness in the chest" } },
+      { "code": "air_hunger", "label": { "zh": "觉得气不够", "en": "Not getting enough air" } },
+      { "code": "burning", "label": { "zh": "烧灼", "en": "Burning" } },
+      { "code": "unable_to_express", "label": { "zh": "无法表达", "en": "Unable to describe" } }
+    ],
+    "dry_productive_unknown": [
+      { "code": "dry", "label": { "zh": "基本没有痰", "en": "Dry or no phlegm" } },
+      { "code": "minimally_productive", "label": { "zh": "只有少量痰", "en": "A small amount of phlegm" } },
+      { "code": "productive", "label": { "zh": "有明显痰", "en": "Clearly productive" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } }
+    ],
+    "sputum_character": [
+      { "code": "clear_white", "label": { "zh": "透明或白色", "en": "Clear or white" } },
+      { "code": "yellow_green", "label": { "zh": "黄色或绿色", "en": "Yellow or green" } },
+      { "code": "thick", "label": { "zh": "黏稠", "en": "Thick" } },
+      { "code": "frothy", "label": { "zh": "泡沫样", "en": "Frothy" } },
+      { "code": "blood_stained", "label": { "zh": "带血", "en": "Blood-stained" } },
+      { "code": "foul_smelling", "label": { "zh": "有明显异味", "en": "Unusually foul-smelling" } },
+      { "code": "unable_to_express", "label": { "zh": "无法表达", "en": "Unable to describe" } }
+    ],
+    "cough_timing": [
+      { "code": "morning", "label": { "zh": "早晨", "en": "Morning" } },
+      { "code": "night", "label": { "zh": "夜间", "en": "Night" } },
+      { "code": "lying_down", "label": { "zh": "躺下后", "en": "After lying down" } },
+      { "code": "after_meals", "label": { "zh": "饭后", "en": "After meals" } },
+      { "code": "exercise", "label": { "zh": "运动时或运动后", "en": "During or after exercise" } },
+      { "code": "all_day", "label": { "zh": "全天都明显", "en": "Throughout the day" } },
+      { "code": "no_pattern", "label": { "zh": "没有明显规律", "en": "No clear pattern" } }
+    ],
+    "cough_triggers": [
+      { "code": "cold_air", "label": { "zh": "冷空气", "en": "Cold air" } },
+      { "code": "perfume_smell", "label": { "zh": "香水或刺激气味", "en": "Perfume or strong smells" } },
+      { "code": "talking_laughing", "label": { "zh": "说话或笑", "en": "Talking or laughing" } },
+      { "code": "eating_drinking", "label": { "zh": "吃喝时", "en": "Eating or drinking" } },
+      { "code": "exercise", "label": { "zh": "运动", "en": "Exercise" } },
+      { "code": "lying_down", "label": { "zh": "躺下", "en": "Lying down" } },
+      { "code": "no_clear_trigger", "label": { "zh": "没有明显诱因", "en": "No clear trigger" } }
+    ],
+    "respiratory_exposures": [
+      { "code": "smoking", "label": { "zh": "吸烟或二手烟", "en": "Smoking or second-hand smoke" } },
+      { "code": "vaping", "label": { "zh": "电子烟", "en": "Vaping" } },
+      { "code": "dust", "label": { "zh": "粉尘", "en": "Dust" } },
+      { "code": "chemical_fumes", "label": { "zh": "化学气味或烟雾", "en": "Chemical fumes" } },
+      { "code": "work_related", "label": { "zh": "工作时更明显", "en": "Worse at work" } },
+      { "code": "pets_hobbies", "label": { "zh": "宠物或兴趣活动相关", "en": "Related to pets or hobbies" } },
+      { "code": "none_known", "label": { "zh": "没有已知接触", "en": "No known exposure" } }
+    ],
+    "temperature_site": [
+      { "code": "axillary", "label": { "zh": "腋下", "en": "Armpit" } },
+      { "code": "oral", "label": { "zh": "口腔", "en": "Mouth" } },
+      { "code": "ear", "label": { "zh": "耳温", "en": "Ear" } },
+      { "code": "forehead", "label": { "zh": "额温", "en": "Forehead" } },
+      { "code": "rectal", "label": { "zh": "直肠", "en": "Rectal" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } }
+    ],
+    "continuous_recurrent_unknown": [
+      { "code": "continuous", "label": { "zh": "一直发热", "en": "Continuous" } },
+      { "code": "comes_and_goes", "label": { "zh": "退下去后又出现", "en": "Comes and goes" } },
+      { "code": "only_once", "label": { "zh": "只出现过一次", "en": "Only once" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } }
+    ],
+    "presence_with_skip": [
+      { "code": "present", "label": { "zh": "是", "en": "Yes" } },
+      { "code": "absent", "label": { "zh": "否", "en": "No" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } },
+      { "code": "prefer_private", "label": { "zh": "跳过，请医生单独确认", "en": "Skip and confirm privately with the doctor" } }
+    ],
+    "abdominal_nine_region_map": [
+      { "code": "right_upper", "label": { "zh": "右上腹", "en": "Right upper abdomen" } },
+      { "code": "upper_middle", "label": { "zh": "上腹正中/心窝", "en": "Upper middle abdomen" } },
+      { "code": "left_upper", "label": { "zh": "左上腹", "en": "Left upper abdomen" } },
+      { "code": "right_middle", "label": { "zh": "右侧腹", "en": "Right middle abdomen" } },
+      { "code": "around_navel", "label": { "zh": "肚脐周围", "en": "Around the navel" } },
+      { "code": "left_middle", "label": { "zh": "左侧腹", "en": "Left middle abdomen" } },
+      { "code": "right_lower", "label": { "zh": "右下腹", "en": "Right lower abdomen" } },
+      { "code": "lower_middle", "label": { "zh": "下腹正中", "en": "Lower middle abdomen" } },
+      { "code": "left_lower", "label": { "zh": "左下腹", "en": "Left lower abdomen" } },
+      { "code": "whole_abdomen", "label": { "zh": "整个腹部", "en": "Whole abdomen" } },
+      { "code": "cannot_locate", "label": { "zh": "无法确定", "en": "Cannot locate it" } }
+    ],
+    "abdominal_radiation": [
+      { "code": "back", "label": { "zh": "背部", "en": "Back" } },
+      { "code": "shoulder", "label": { "zh": "肩部", "en": "Shoulder" } },
+      { "code": "groin", "label": { "zh": "腹股沟", "en": "Groin" } },
+      { "code": "chest", "label": { "zh": "胸部", "en": "Chest" } },
+      { "code": "none", "label": { "zh": "不扩散", "en": "Does not spread" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } }
+    ],
+    "abdominal_triggers": [
+      { "code": "after_eating", "label": { "zh": "吃饭后", "en": "After eating" } },
+      { "code": "empty_stomach", "label": { "zh": "空腹时", "en": "When the stomach is empty" } },
+      { "code": "movement_cough", "label": { "zh": "走动、咳嗽或颠簸", "en": "Movement, coughing, or bumps" } },
+      { "code": "urination", "label": { "zh": "排尿时", "en": "During urination" } },
+      { "code": "bowel_movement", "label": { "zh": "排便前后", "en": "Before or after a bowel movement" } },
+      { "code": "menstrual_relation", "label": { "zh": "与月经时间有关", "en": "Related to menstrual timing" } },
+      { "code": "no_clear_trigger", "label": { "zh": "没有明显诱因", "en": "No clear trigger" } }
+    ],
+    "abdominal_relievers": [
+      { "code": "rest", "label": { "zh": "休息", "en": "Rest" } },
+      { "code": "eating", "label": { "zh": "进食", "en": "Eating" } },
+      { "code": "bowel_movement", "label": { "zh": "排便或排气", "en": "Passing stool or gas" } },
+      { "code": "vomiting", "label": { "zh": "呕吐后", "en": "After vomiting" } },
+      { "code": "position", "label": { "zh": "蜷缩或改变姿势", "en": "Curling up or changing position" } },
+      { "code": "medication", "label": { "zh": "用药后", "en": "After medication" } },
+      { "code": "nothing", "label": { "zh": "没有什么能缓解", "en": "Nothing helps" } }
+    ],
+    "continuous_episodic_unknown": [
+      { "code": "continuous", "label": { "zh": "一直存在", "en": "Continuous" } },
+      { "code": "episodic", "label": { "zh": "一阵一阵", "en": "Comes in episodes" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } }
+    ],
+    "dizziness_triggers": [
+      { "code": "head_movement", "label": { "zh": "转头或抬头低头", "en": "Turning or tilting the head" } },
+      { "code": "rolling_in_bed", "label": { "zh": "在床上翻身", "en": "Rolling over in bed" } },
+      { "code": "standing_up", "label": { "zh": "从坐/躺变为站立", "en": "Standing up from sitting or lying" } },
+      { "code": "walking", "label": { "zh": "走路时", "en": "While walking" } },
+      { "code": "cough_swallow", "label": { "zh": "咳嗽或吞咽时", "en": "Coughing or swallowing" } },
+      { "code": "no_clear_trigger", "label": { "zh": "没有明确诱因", "en": "No clear trigger" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } }
+    ],
+    "walking_ability": [
+      { "code": "normal", "label": { "zh": "能正常站立和行走", "en": "Can stand and walk normally" } },
+      { "code": "unsteady_independent", "label": { "zh": "不稳，但能自己走", "en": "Unsteady but can walk without help" } },
+      { "code": "cannot_walk_without_help", "label": { "zh": "需要别人扶才能走", "en": "Need help to walk" } },
+      { "code": "cannot_stand", "label": { "zh": "无法站立", "en": "Cannot stand" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } }
+    ],
+    "fatigue_experience": [
+      { "code": "low_energy", "label": { "zh": "没精力、容易累", "en": "Low energy or easily exhausted" } },
+      { "code": "sleepiness", "label": { "zh": "总想睡觉", "en": "Sleepy or likely to doze off" } },
+      { "code": "general_weakness", "label": { "zh": "全身使不上力", "en": "General weakness" } },
+      { "code": "focal_weakness", "label": { "zh": "某一侧或某个部位使不上力", "en": "Weakness in one side or body area" } },
+      { "code": "breathlessness_limited", "label": { "zh": "主要是喘，导致活动不了", "en": "Mostly breathlessness limiting activity" } },
+      { "code": "unable_to_express", "label": { "zh": "无法表达", "en": "Unable to describe" } }
+    ],
+    "functional_change": [
+      { "code": "none", "label": { "zh": "和以前差不多", "en": "About the same as before" } },
+      { "code": "small_reduction", "label": { "zh": "少做了一些活动", "en": "A small reduction" } },
+      { "code": "moderate_reduction", "label": { "zh": "很多活动需要减少", "en": "A moderate reduction" } },
+      { "code": "major_reduction", "label": { "zh": "大部分原来能做的事都做不了", "en": "Unable to do most previous activities" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } }
+    ],
+    "day_pattern": [
+      { "code": "morning", "label": { "zh": "早晨", "en": "Morning" } },
+      { "code": "afternoon", "label": { "zh": "下午", "en": "Afternoon" } },
+      { "code": "evening", "label": { "zh": "晚上", "en": "Evening" } },
+      { "code": "after_activity", "label": { "zh": "活动后", "en": "After activity" } },
+      { "code": "all_day", "label": { "zh": "全天", "en": "All day" } },
+      { "code": "no_pattern", "label": { "zh": "没有明显规律", "en": "No clear pattern" } }
+    ],
+    "rest_response": [
+      { "code": "fully_refreshed", "label": { "zh": "明显恢复", "en": "Much better or refreshed" } },
+      { "code": "partly_better", "label": { "zh": "有一些改善", "en": "Partly better" } },
+      { "code": "not_refreshed", "label": { "zh": "没有明显改善", "en": "Not refreshed" } },
+      { "code": "worse", "label": { "zh": "反而更难受", "en": "Feel worse" } },
+      { "code": "uncertain", "label": { "zh": "不确定", "en": "Not sure" } }
+    ]
+  },
+  "followup_templates": {
+    "core_hpi_v1": {
+      "description": "所有主症状共享的最小现病史属性",
+      "questions": [
+        { "id": "core.current_status", "field": "current_status", "prompt": { "zh": "你现在还有这个不适吗？", "en": "Do you have this symptom right now?" }, "answer_type": "single_choice", "value_set": "response_sets.current_status_v1", "required": true, "source_refs": ["S01", "S09"] },
+        { "id": "core.onset", "field": "onset", "prompt": { "zh": "这个不适最早什么时候开始？", "en": "When did this symptom first begin?" }, "answer_type": "date_or_relative", "required": true, "source_refs": ["S01"] },
+        { "id": "core.episode_duration", "field": "episode_duration", "prompt": { "zh": "每次通常持续多久？如果一直存在，请选择“持续存在”。", "en": "How long does each episode usually last? Choose “continuous” if it does not stop." }, "answer_type": "duration", "required": true, "source_refs": ["S01"] },
+        { "id": "core.frequency", "field": "frequency", "prompt": { "zh": "这个不适出现得多频繁？", "en": "How often does this symptom happen?" }, "answer_type": "single_choice", "value_set": "value_sets.frequency_v1", "required": true, "source_refs": ["S01"] },
+        { "id": "core.severity", "field": "severity_nrs", "prompt": { "zh": "最严重时有多难受？0 是完全不难受，10 是能想象的最难受。", "en": "At its worst, how bad is it? 0 means no discomfort and 10 means the worst you can imagine." }, "answer_type": "number", "unit": "0-10", "required": false, "source_refs": ["S01", "S09"] },
+        { "id": "core.progression", "field": "progression", "prompt": { "zh": "和刚开始相比，现在怎样？", "en": "Compared with when it began, how is it now?" }, "answer_type": "single_choice", "value_set": "response_sets.progression_v1", "required": true, "source_refs": ["S01"] },
+        { "id": "core.functional_impact", "field": "functional_impact", "prompt": { "zh": "这个不适对日常活动影响多大？", "en": "How much does this symptom affect your daily activities?" }, "answer_type": "single_choice", "value_set": "response_sets.functional_impact_v1", "required": false, "source_refs": ["S01", "S07", "S09"] }
+      ]
+    },
+    "associated_followup_v1": {
+      "description": "伴随症状选“有”后只展开一次，不再递归",
+      "max_depth": 1,
+      "questions": [
+        { "id": "assoc.temporal_relation", "field": "temporal_relation", "prompt": { "zh": "它和主要不适在时间上是什么关系？", "en": "How is it timed in relation to the main symptom?" }, "answer_type": "single_choice", "value_set": "response_sets.temporal_relation_v1", "required": true, "source_refs": ["S01", "S09"] },
+        { "id": "assoc.same_episode", "field": "same_episode", "prompt": { "zh": "主要不适每次出现时，它也会一起出现吗？", "en": "Does it occur during the same episodes as the main symptom?" }, "answer_type": "single_choice", "value_set": "response_sets.presence_v1", "required": false, "source_refs": ["S01", "S09"] },
+        { "id": "assoc.note", "field": "brief_note", "prompt": { "zh": "还有需要医生知道的简短说明吗？", "en": "Is there anything brief the doctor should know about it?" }, "answer_type": "free_text", "required": false, "source_refs": ["S09"] }
+      ]
+    }
+  },
+  "symptoms": [
+    {
+      "id": "chest_pain",
+      "label": { "zh": "胸痛", "en": "Chest pain" },
+      "terminology": { "hpo": { "id": "HP:0100749", "label": "Chest pain" }, "mesh": { "id": "D002637", "label": "Chest Pain" }, "mapping_status": "exact" },
+      "aliases": [{ "zh": "胸部不适", "en": "Chest discomfort" }],
+      "entry_prompts": [{ "zh": "胸部哪里不舒服？", "en": "Where in your chest do you feel discomfort?" }],
+      "question_sequence": ["red_flags", "core_hpi_v1", "symptom_specific", "associated_symptoms", "associated_followup_v1"],
+      "questions": [
+        { "id": "chest.location", "field": "location", "prompt": { "zh": "不适主要在哪里？可以点选多处。", "en": "Where is the discomfort? You may choose more than one area." }, "answer_type": "multi_choice", "value_set": "chest_body_map", "required": true, "source_refs": ["S02"] },
+        { "id": "chest.character", "field": "character", "prompt": { "zh": "这种感觉更像哪一种？", "en": "Which description best matches the feeling?" }, "answer_type": "single_choice", "value_set": "value_sets.pain_character_v1", "required": true, "source_refs": ["S02", "S09"] },
+        { "id": "chest.radiation", "field": "radiation", "prompt": { "zh": "不适会扩散到其他地方吗？", "en": "Does the discomfort spread anywhere else?" }, "answer_type": "multi_choice", "value_set": "chest_radiation_map", "required": false, "source_refs": ["S02"] },
+        { "id": "chest.onset_speed", "field": "onset_speed", "prompt": { "zh": "开始时是突然达到最重，还是慢慢加重？", "en": "Did it become severe suddenly, or build up gradually?" }, "answer_type": "single_choice", "value_set": "sudden_gradual_unknown", "required": true, "source_refs": ["S02"] },
+        { "id": "chest.triggers", "field": "triggers", "prompt": { "zh": "什么情况下容易出现或加重？", "en": "What brings it on or makes it worse?" }, "answer_type": "multi_choice", "value_set": "chest_triggers", "required": true, "source_refs": ["S02"] },
+        { "id": "chest.relievers", "field": "relievers", "prompt": { "zh": "什么情况下会减轻？", "en": "What makes it better?" }, "answer_type": "multi_choice", "value_set": "chest_relievers", "required": true, "source_refs": ["S02"] }
+      ],
+      "associated_symptoms": [
+        { "code": "dyspnea", "label": { "zh": "气短、喘不过气", "en": "Shortness of breath" }, "followup_template": "associated_followup_v1", "source_refs": ["S02"] },
+        { "code": "palpitations", "label": { "zh": "心跳很快、很重或不齐", "en": "Fast, pounding, or irregular heartbeat" }, "followup_template": "associated_followup_v1", "source_refs": ["S02"] },
+        { "code": "sweating", "label": { "zh": "明显出汗", "en": "Unusual sweating" }, "followup_template": "associated_followup_v1", "source_refs": ["S02"] },
+        { "code": "nausea_vomiting", "label": { "zh": "恶心或呕吐", "en": "Nausea or vomiting" }, "followup_template": "associated_followup_v1", "source_refs": ["S02"] },
+        { "code": "lightheaded_syncope", "label": { "zh": "眼前发黑或晕倒", "en": "Lightheadedness or fainting" }, "followup_template": "associated_followup_v1", "source_refs": ["S02"] },
+        { "code": "cough_hemoptysis", "label": { "zh": "咳嗽或咳血", "en": "Cough or coughing blood" }, "followup_template": "associated_followup_v1", "source_refs": ["S03"] }
+      ],
+      "red_flags": [
+        { "id": "chest.current_severe", "clinician_label": { "zh": "当前仍有重度胸部不适", "en": "Severe chest discomfort is present now" }, "condition": { "all": [{ "field": "current_status", "op": "eq", "value": "present" }, { "field": "severity_nrs", "op": "gte", "value": 7 }] }, "action": "priority_clinician_assessment", "source_refs": ["S02", "S09"] },
+        { "id": "chest.sudden_tearing", "clinician_label": { "zh": "突发撕裂样胸部不适，可能向背部扩散", "en": "Sudden tearing chest discomfort, possibly spreading to the back" }, "condition": { "all": [{ "field": "onset_speed", "op": "eq", "value": "sudden_maximal" }, { "field": "character", "op": "eq", "value": "tearing" }] }, "action": "priority_clinician_assessment", "source_refs": ["S02"] },
+        { "id": "chest.syncope", "clinician_label": { "zh": "胸部不适伴晕倒或接近晕倒", "en": "Chest discomfort with fainting or near-fainting" }, "condition": { "field": "associated.lightheaded_syncope.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S02"] },
+        { "id": "chest.dyspnea", "clinician_label": { "zh": "胸部不适伴明显气短", "en": "Chest discomfort with marked shortness of breath" }, "condition": { "field": "associated.dyspnea.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S02", "S09"] }
+      ],
+      "documentation_order": ["onset", "location", "character", "radiation", "onset_speed", "episode_duration", "frequency", "severity_nrs", "triggers", "relievers", "progression", "associated_symptoms", "functional_impact"],
+      "source_refs": ["S01", "S02", "S09"]
+    },
+    {
+      "id": "chest_tightness",
+      "label": { "zh": "胸闷", "en": "Chest tightness" },
+      "terminology": { "hpo": { "id": "HP:0031352", "label": "Chest tightness" }, "mesh": { "id": "D002637", "label": "Chest Pain" }, "mapping_status": "hpo_exact_mesh_broader" },
+      "aliases": [{ "zh": "胸口发紧", "en": "Tight feeling in the chest" }, { "zh": "胸口像被压住", "en": "Pressure in the chest" }],
+      "entry_prompts": [{ "zh": "胸闷更像胸口被压住、发紧，还是气不够？", "en": "Does the chest tightness feel like pressure, squeezing, or not getting enough air?" }],
+      "question_sequence": ["red_flags", "core_hpi_v1", "symptom_specific", "associated_symptoms", "associated_followup_v1"],
+      "questions": [
+        { "id": "tightness.primary_feeling", "field": "primary_feeling", "prompt": { "zh": "胸闷最像哪一种感觉？", "en": "Which feeling best matches the chest tightness?" }, "answer_type": "single_choice", "value_set": "chest_tightness_feelings", "required": true, "source_refs": ["S02", "S09"] },
+        { "id": "tightness.location", "field": "location", "prompt": { "zh": "这种感觉主要在哪里？", "en": "Where do you mainly feel it?" }, "answer_type": "multi_choice", "value_set": "chest_body_map", "required": true, "source_refs": ["S02"] },
+        { "id": "tightness.onset_speed", "field": "onset_speed", "prompt": { "zh": "开始时是突然出现，还是慢慢出现？", "en": "Did it begin suddenly or gradually?" }, "answer_type": "single_choice", "value_set": "sudden_gradual_unknown", "required": true, "source_refs": ["S02"] },
+        { "id": "tightness.triggers", "field": "triggers", "prompt": { "zh": "什么情况下容易出现或加重？", "en": "What brings it on or makes it worse?" }, "answer_type": "multi_choice", "value_set": "chest_triggers", "required": true, "source_refs": ["S02"] },
+        { "id": "tightness.relievers", "field": "relievers", "prompt": { "zh": "什么情况下会减轻？", "en": "What makes it better?" }, "answer_type": "multi_choice", "value_set": "chest_relievers", "required": true, "source_refs": ["S02"] }
+      ],
+      "associated_symptoms": [
+        { "code": "dyspnea", "label": { "zh": "气短、喘不过气", "en": "Shortness of breath" }, "followup_template": "associated_followup_v1", "source_refs": ["S02"] },
+        { "code": "chest_pain", "label": { "zh": "同时胸痛", "en": "Chest pain at the same time" }, "followup_template": "associated_followup_v1", "source_refs": ["S02"] },
+        { "code": "palpitations", "label": { "zh": "心跳很快、很重或不齐", "en": "Fast, pounding, or irregular heartbeat" }, "followup_template": "associated_followup_v1", "source_refs": ["S02"] },
+        { "code": "sweating", "label": { "zh": "明显出汗", "en": "Unusual sweating" }, "followup_template": "associated_followup_v1", "source_refs": ["S02"] },
+        { "code": "nausea_vomiting", "label": { "zh": "恶心或呕吐", "en": "Nausea or vomiting" }, "followup_template": "associated_followup_v1", "source_refs": ["S02"] },
+        { "code": "lightheaded_syncope", "label": { "zh": "眼前发黑或晕倒", "en": "Lightheadedness or fainting" }, "followup_template": "associated_followup_v1", "source_refs": ["S02"] }
+      ],
+      "red_flags": [
+        { "id": "tightness.current_severe", "clinician_label": { "zh": "当前仍有重度胸闷", "en": "Severe chest tightness is present now" }, "condition": { "all": [{ "field": "current_status", "op": "eq", "value": "present" }, { "field": "severity_nrs", "op": "gte", "value": 7 }] }, "action": "priority_clinician_assessment", "source_refs": ["S02", "S09"] },
+        { "id": "tightness.syncope", "clinician_label": { "zh": "胸闷伴晕倒或接近晕倒", "en": "Chest tightness with fainting or near-fainting" }, "condition": { "field": "associated.lightheaded_syncope.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S02"] },
+        { "id": "tightness.dyspnea", "clinician_label": { "zh": "胸闷伴明显气短", "en": "Chest tightness with marked shortness of breath" }, "condition": { "field": "associated.dyspnea.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S02", "S09"] }
+      ],
+      "documentation_order": ["onset", "primary_feeling", "location", "onset_speed", "episode_duration", "frequency", "severity_nrs", "triggers", "relievers", "progression", "associated_symptoms", "functional_impact"],
+      "source_refs": ["S01", "S02", "S09"]
+    },
+    {
+      "id": "cough",
+      "label": { "zh": "咳嗽", "en": "Cough" },
+      "terminology": { "hpo": { "id": "HP:0012735", "label": "Cough" }, "mesh": { "id": "D003371", "label": "Cough" }, "mapping_status": "exact" },
+      "aliases": [{ "zh": "干咳", "en": "Dry cough" }, { "zh": "咳痰", "en": "Productive cough" }],
+      "entry_prompts": [{ "zh": "你是在咳嗽，还是主要想清嗓子？", "en": "Are you coughing, or mainly clearing your throat?" }],
+      "question_sequence": ["red_flags", "core_hpi_v1", "symptom_specific", "associated_symptoms", "associated_followup_v1"],
+      "questions": [
+        { "id": "cough.type", "field": "cough_type", "prompt": { "zh": "咳嗽时有痰吗？", "en": "Do you bring up phlegm when you cough?" }, "answer_type": "single_choice", "value_set": "dry_productive_unknown", "required": true, "source_refs": ["S03"] },
+        { "id": "cough.sputum", "field": "sputum_character", "prompt": { "zh": "痰是什么样？可以多选。", "en": "What is the phlegm like? Choose all that apply." }, "answer_type": "multi_choice", "value_set": "sputum_character", "required": false, "show_if": { "field": "cough_type", "op": "eq", "value": "productive" }, "source_refs": ["S03"] },
+        { "id": "cough.blood", "field": "hemoptysis", "prompt": { "zh": "咳出的痰里有血或直接咳血吗？", "en": "Is there blood in the phlegm, or are you coughing up blood?" }, "answer_type": "single_choice", "value_set": "response_sets.presence_v1", "required": true, "source_refs": ["S03"] },
+        { "id": "cough.timing", "field": "timing_pattern", "prompt": { "zh": "咳嗽什么时候更明显？", "en": "When is the cough more noticeable?" }, "answer_type": "multi_choice", "value_set": "cough_timing", "required": false, "source_refs": ["S03"] },
+        { "id": "cough.triggers", "field": "triggers", "prompt": { "zh": "什么容易引起咳嗽？", "en": "What tends to trigger the cough?" }, "answer_type": "multi_choice", "value_set": "cough_triggers", "required": false, "source_refs": ["S03"] },
+        { "id": "cough.exposures", "field": "exposures", "prompt": { "zh": "最近是否接触烟雾、电子烟、粉尘、化学气味或工作环境刺激？", "en": "Have you recently been exposed to smoke, vaping, dust, chemical smells, or workplace irritants?" }, "answer_type": "multi_choice", "value_set": "respiratory_exposures", "required": false, "source_refs": ["S03"] }
+      ],
+      "associated_symptoms": [
+        { "code": "dyspnea", "label": { "zh": "气短或喘不过气", "en": "Shortness of breath" }, "followup_template": "associated_followup_v1", "source_refs": ["S03"] },
+        { "code": "wheeze", "label": { "zh": "呼吸时有哨音或喘鸣", "en": "Wheezing or whistling breathing" }, "followup_template": "associated_followup_v1", "source_refs": ["S03"] },
+        { "code": "fever", "label": { "zh": "发热或发冷", "en": "Fever or chills" }, "followup_template": "associated_followup_v1", "source_refs": ["S05"] },
+        { "code": "chest_pain", "label": { "zh": "胸痛", "en": "Chest pain" }, "followup_template": "associated_followup_v1", "source_refs": ["S03"] },
+        { "code": "nasal_throat", "label": { "zh": "鼻塞、流涕、喉咙痒或声音变化", "en": "Blocked or runny nose, itchy throat, or voice change" }, "followup_template": "associated_followup_v1", "source_refs": ["S03"] },
+        { "code": "heartburn", "label": { "zh": "反酸或烧心", "en": "Acid reflux or heartburn" }, "followup_template": "associated_followup_v1", "source_refs": ["S03"] },
+        { "code": "weight_loss_night_sweats", "label": { "zh": "体重明显下降或夜间出汗", "en": "Unexplained weight loss or night sweats" }, "followup_template": "associated_followup_v1", "source_refs": ["S03", "S05"] }
+      ],
+      "red_flags": [
+        { "id": "cough.hemoptysis", "clinician_label": { "zh": "咳血或血痰", "en": "Coughing blood or blood-stained sputum" }, "condition": { "field": "hemoptysis", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S03", "S05"] },
+        { "id": "cough.dyspnea", "clinician_label": { "zh": "咳嗽伴明显气短", "en": "Cough with marked shortness of breath" }, "condition": { "field": "associated.dyspnea.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S03", "S09"] },
+        { "id": "cough.weight_loss", "clinician_label": { "zh": "持续咳嗽伴体重下降或夜间出汗", "en": "Persistent cough with weight loss or night sweats" }, "condition": { "field": "associated.weight_loss_night_sweats.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S03", "S05"] }
+      ],
+      "documentation_order": ["onset", "episode_duration", "frequency", "cough_type", "sputum_character", "hemoptysis", "timing_pattern", "triggers", "exposures", "progression", "associated_symptoms", "functional_impact"],
+      "source_refs": ["S01", "S03", "S05", "S09"]
+    },
+    {
+      "id": "fever",
+      "label": { "zh": "发热", "en": "Fever" },
+      "terminology": { "hpo": { "id": "HP:0001945", "label": "Fever" }, "mesh": { "id": "D005334", "label": "Fever" }, "mapping_status": "exact" },
+      "aliases": [{ "zh": "发烧", "en": "High temperature" }, { "zh": "觉得发热", "en": "Feeling feverish" }],
+      "entry_prompts": [{ "zh": "你量过体温，还是只是感觉发热？", "en": "Did you measure your temperature, or do you only feel feverish?" }],
+      "question_sequence": ["red_flags", "core_hpi_v1", "symptom_specific", "associated_symptoms", "associated_followup_v1"],
+      "questions": [
+        { "id": "fever.measured", "field": "temperature_measured", "prompt": { "zh": "你量过体温吗？", "en": "Did you measure your temperature?" }, "answer_type": "single_choice", "value_set": "response_sets.presence_v1", "required": true, "source_refs": ["S05"] },
+        { "id": "fever.max_temp", "field": "max_temperature_c", "prompt": { "zh": "最高体温是多少摄氏度？", "en": "What was the highest temperature in degrees Celsius?" }, "answer_type": "number", "unit": "Cel", "required": false, "show_if": { "field": "temperature_measured", "op": "eq", "value": "present" }, "source_refs": ["S05"] },
+        { "id": "fever.measure_site", "field": "measurement_site", "prompt": { "zh": "体温是从哪里测的？", "en": "Where was the temperature measured?" }, "answer_type": "single_choice", "value_set": "temperature_site", "required": false, "show_if": { "field": "temperature_measured", "op": "eq", "value": "present" }, "source_refs": ["S05", "S09"] },
+        { "id": "fever.pattern", "field": "fever_pattern", "prompt": { "zh": "发热是一直有，还是会退下去后又出现？", "en": "Is the fever continuous, or does it go away and return?" }, "answer_type": "single_choice", "value_set": "continuous_recurrent_unknown", "required": false, "source_refs": ["S01", "S09"] },
+        { "id": "fever.rigors", "field": "rigors", "prompt": { "zh": "有没有冷得全身明显发抖、控制不住？", "en": "Have you had uncontrollable shaking chills?" }, "answer_type": "single_choice", "value_set": "response_sets.presence_v1", "required": false, "source_refs": ["S05"] },
+        { "id": "fever.travel", "field": "recent_travel", "prompt": { "zh": "近 3 个月去过外地或国外吗？", "en": "Have you travelled away from your area or abroad in the past 3 months?" }, "answer_type": "single_choice", "value_set": "response_sets.presence_v1", "required": false, "source_refs": ["S05"] },
+        { "id": "fever.sick_contact", "field": "sick_contact", "prompt": { "zh": "最近身边有人也在发热或生病吗？", "en": "Has anyone around you recently had a fever or been ill?" }, "answer_type": "single_choice", "value_set": "response_sets.presence_v1", "required": false, "source_refs": ["S09"] },
+        { "id": "fever.immunosuppression", "field": "immunosuppression_context", "prompt": { "zh": "你是否正在化疗，或使用会降低免疫力的药物？", "en": "Are you receiving chemotherapy or medicines that lower immunity?" }, "answer_type": "single_choice", "value_set": "response_sets.presence_v1", "required": false, "source_refs": ["S08"] }
+      ],
+      "associated_symptoms": [
+        { "code": "cough_dyspnea", "label": { "zh": "咳嗽或气短", "en": "Cough or shortness of breath" }, "followup_template": "associated_followup_v1", "source_refs": ["S05"] },
+        { "code": "sore_throat_nasal", "label": { "zh": "咽痛、鼻塞或流涕", "en": "Sore throat, blocked nose, or runny nose" }, "followup_template": "associated_followup_v1", "source_refs": ["S05"] },
+        { "code": "headache_neck_stiffness", "label": { "zh": "明显头痛或脖子僵硬", "en": "Severe headache or stiff neck" }, "followup_template": "associated_followup_v1", "source_refs": ["S05"] },
+        { "code": "vomiting_diarrhea", "label": { "zh": "呕吐或腹泻", "en": "Vomiting or diarrhea" }, "followup_template": "associated_followup_v1", "source_refs": ["S05"] },
+        { "code": "dysuria_flank", "label": { "zh": "尿痛或腰背一侧痛", "en": "Pain when urinating or pain in one side of the back" }, "followup_template": "associated_followup_v1", "source_refs": ["S05"] },
+        { "code": "rash", "label": { "zh": "新出现皮疹、紫红点或皮肤颜色异常", "en": "New rash, purple-red spots, or unusual skin colour" }, "followup_template": "associated_followup_v1", "source_refs": ["S08"] },
+        { "code": "confusion_drowsy", "label": { "zh": "反应变慢、意识不清或很难叫醒", "en": "Confusion, unusual drowsiness, or hard to wake" }, "followup_template": "associated_followup_v1", "source_refs": ["S05", "S08"] },
+        { "code": "jaundice", "label": { "zh": "眼白或皮肤发黄", "en": "Yellow eyes or skin" }, "followup_template": "associated_followup_v1", "source_refs": ["S05"] }
+      ],
+      "red_flags": [
+        { "id": "fever.confusion", "clinician_label": { "zh": "发热伴意识或反应异常", "en": "Fever with altered mental state" }, "condition": { "field": "associated.confusion_drowsy.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S05", "S08"] },
+        { "id": "fever.breathing", "clinician_label": { "zh": "发热伴明显呼吸困难", "en": "Fever with marked breathing difficulty" }, "condition": { "field": "associated.cough_dyspnea.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S05", "S08", "S09"] },
+        { "id": "fever.rash", "clinician_label": { "zh": "发热伴紫红色或不褪色样皮疹", "en": "Fever with purple-red or non-blanching-type rash" }, "condition": { "field": "associated.rash.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S08"] },
+        { "id": "fever.jaundice", "clinician_label": { "zh": "发热伴黄疸", "en": "Fever with jaundice" }, "condition": { "field": "associated.jaundice.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S05"] },
+        { "id": "fever.immunosuppression", "clinician_label": { "zh": "发热且存在免疫抑制背景", "en": "Fever with an immunosuppression context" }, "condition": { "field": "immunosuppression_context", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S08"] }
+      ],
+      "documentation_order": ["onset", "temperature_measured", "max_temperature_c", "measurement_site", "fever_pattern", "rigors", "episode_duration", "frequency", "progression", "recent_travel", "sick_contact", "immunosuppression_context", "associated_symptoms", "functional_impact"],
+      "source_refs": ["S01", "S05", "S08", "S09"]
+    },
+    {
+      "id": "abdominal_pain",
+      "label": { "zh": "腹痛", "en": "Abdominal pain" },
+      "terminology": { "hpo": { "id": "HP:0002027", "label": "Abdominal pain" }, "mesh": { "id": "D015746", "label": "Abdominal Pain" }, "mapping_status": "exact" },
+      "aliases": [{ "zh": "肚子痛", "en": "Stomach pain" }],
+      "entry_prompts": [{ "zh": "请在腹部图上点出最痛的位置。", "en": "Please tap the most painful area on the abdomen picture." }],
+      "question_sequence": ["red_flags", "core_hpi_v1", "symptom_specific", "associated_symptoms", "sensitive_branch", "associated_followup_v1"],
+      "questions": [
+        { "id": "abdomen.location", "field": "location", "prompt": { "zh": "最痛的位置在哪里？可以点选多处。", "en": "Where does it hurt most? You may choose more than one area." }, "answer_type": "multi_choice", "value_set": "abdominal_nine_region_map", "required": true, "source_refs": ["S06"] },
+        { "id": "abdomen.character", "field": "character", "prompt": { "zh": "疼痛更像哪一种？", "en": "Which description best matches the pain?" }, "answer_type": "single_choice", "value_set": "value_sets.abdominal_character_v1", "required": true, "source_refs": ["S06", "S09"] },
+        { "id": "abdomen.onset_speed", "field": "onset_speed", "prompt": { "zh": "疼痛是突然达到最重，还是慢慢加重？", "en": "Did the pain become severe suddenly, or build up gradually?" }, "answer_type": "single_choice", "value_set": "sudden_gradual_unknown", "required": true, "source_refs": ["S06"] },
+        { "id": "abdomen.migration", "field": "migration", "prompt": { "zh": "疼痛的位置后来移动过吗？", "en": "Has the pain moved from one area to another?" }, "answer_type": "single_choice", "value_set": "response_sets.presence_v1", "required": false, "source_refs": ["S06"] },
+        { "id": "abdomen.radiation", "field": "radiation", "prompt": { "zh": "疼痛会扩散到背部、肩部、腹股沟或其他地方吗？", "en": "Does the pain spread to the back, shoulder, groin, or elsewhere?" }, "answer_type": "multi_choice", "value_set": "abdominal_radiation", "required": false, "source_refs": ["S06"] },
+        { "id": "abdomen.triggers", "field": "triggers", "prompt": { "zh": "什么会让疼痛出现或加重？", "en": "What brings on the pain or makes it worse?" }, "answer_type": "multi_choice", "value_set": "abdominal_triggers", "required": false, "source_refs": ["S06"] },
+        { "id": "abdomen.relievers", "field": "relievers", "prompt": { "zh": "什么会让疼痛减轻？", "en": "What makes the pain better?" }, "answer_type": "multi_choice", "value_set": "abdominal_relievers", "required": false, "source_refs": ["S06"] },
+        { "id": "abdomen.pregnancy_possible", "field": "pregnancy_possible", "prompt": { "zh": "如果你有怀孕可能：这次是否可能怀孕？你可以选择不回答并请医生单独确认。", "en": "If pregnancy is possible for you: could you be pregnant? You may skip and ask the doctor to confirm privately." }, "answer_type": "single_choice", "value_set": "presence_with_skip", "required": false, "source_refs": ["S06", "S09"] },
+        { "id": "abdomen.vaginal_bleeding", "field": "vaginal_bleeding", "prompt": { "zh": "是否有非平常月经的阴道出血？你可以选择不回答。", "en": "Do you have vaginal bleeding that is not your usual period? You may skip this question." }, "answer_type": "single_choice", "value_set": "presence_with_skip", "required": false, "source_refs": ["S06", "S09"] }
+      ],
+      "associated_symptoms": [
+        { "code": "nausea_vomiting", "label": { "zh": "恶心或呕吐", "en": "Nausea or vomiting" }, "followup_template": "associated_followup_v1", "source_refs": ["S06"] },
+        { "code": "diarrhea", "label": { "zh": "腹泻", "en": "Diarrhea" }, "followup_template": "associated_followup_v1", "source_refs": ["S06"] },
+        { "code": "constipation_obstipation", "label": { "zh": "便秘，或停止排便排气", "en": "Constipation, or unable to pass stool or gas" }, "followup_template": "associated_followup_v1", "source_refs": ["S05", "S06"] },
+        { "code": "gi_bleeding", "label": { "zh": "呕血、黑便或便血", "en": "Vomiting blood, black stool, or blood in stool" }, "followup_template": "associated_followup_v1", "source_refs": ["S05", "S06"] },
+        { "code": "fever", "label": { "zh": "发热或发冷", "en": "Fever or chills" }, "followup_template": "associated_followup_v1", "source_refs": ["S06"] },
+        { "code": "urinary", "label": { "zh": "尿痛、尿频或血尿", "en": "Painful urination, frequent urination, or blood in urine" }, "followup_template": "associated_followup_v1", "source_refs": ["S06"] },
+        { "code": "jaundice", "label": { "zh": "眼白或皮肤发黄", "en": "Yellow eyes or skin" }, "followup_template": "associated_followup_v1", "source_refs": ["S05", "S06"] },
+        { "code": "syncope", "label": { "zh": "眼前发黑或晕倒", "en": "Near-fainting or fainting" }, "followup_template": "associated_followup_v1", "source_refs": ["S06"] }
+      ],
+      "red_flags": [
+        { "id": "abdomen.sudden_severe", "clinician_label": { "zh": "突发重度腹痛", "en": "Sudden severe abdominal pain" }, "condition": { "all": [{ "field": "onset_speed", "op": "eq", "value": "sudden_maximal" }, { "field": "severity_nrs", "op": "gte", "value": 7 }] }, "action": "priority_clinician_assessment", "source_refs": ["S06"] },
+        { "id": "abdomen.gi_bleeding", "clinician_label": { "zh": "腹痛伴消化道出血表现", "en": "Abdominal pain with gastrointestinal bleeding" }, "condition": { "field": "associated.gi_bleeding.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S05", "S06"] },
+        { "id": "abdomen.obstipation_vomiting", "clinician_label": { "zh": "腹痛伴呕吐且停止排便排气", "en": "Abdominal pain with vomiting and inability to pass stool or gas" }, "condition": { "all": [{ "field": "associated.nausea_vomiting.status", "op": "eq", "value": "present" }, { "field": "associated.constipation_obstipation.status", "op": "eq", "value": "present" }] }, "action": "priority_clinician_assessment", "source_refs": ["S05"] },
+        { "id": "abdomen.pregnancy_bleeding", "clinician_label": { "zh": "腹痛且可能妊娠，伴或不伴异常阴道出血", "en": "Abdominal pain with possible pregnancy, with or without unusual vaginal bleeding" }, "condition": { "field": "pregnancy_possible", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment_private_confirmation", "source_refs": ["S06", "S09"] },
+        { "id": "abdomen.syncope", "clinician_label": { "zh": "腹痛伴晕倒或接近晕倒", "en": "Abdominal pain with fainting or near-fainting" }, "condition": { "field": "associated.syncope.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S06"] }
+      ],
+      "documentation_order": ["onset", "location", "character", "onset_speed", "migration", "radiation", "episode_duration", "frequency", "severity_nrs", "triggers", "relievers", "progression", "associated_symptoms", "pregnancy_possible", "vaginal_bleeding", "functional_impact"],
+      "source_refs": ["S01", "S05", "S06", "S09"]
+    },
+    {
+      "id": "dizziness",
+      "label": { "zh": "头晕", "en": "Dizziness" },
+      "terminology": { "hpo": { "id": "HP:0002321", "label": "Vertigo" }, "mesh": { "id": "D004244", "label": "Dizziness" }, "mapping_status": "related_not_identical", "note": "HPO uses Dizziness as a synonym of Vertigo, while MeSH distinguishes them; preserve the patient's original wording." },
+      "aliases": [{ "zh": "眩晕", "en": "Vertigo" }, { "zh": "站不稳", "en": "Unsteadiness" }],
+      "entry_prompts": [{ "zh": "先告诉我们：头晕是一直存在，还是一阵一阵？", "en": "First, is the dizziness continuous or does it come in episodes?" }],
+      "question_sequence": ["red_flags", "timing_and_triggers", "core_hpi_v1", "symptom_specific", "associated_symptoms", "associated_followup_v1"],
+      "questions": [
+        { "id": "dizziness.pattern", "field": "pattern", "prompt": { "zh": "头晕是一直存在，还是一阵一阵？", "en": "Is the dizziness continuous or episodic?" }, "answer_type": "single_choice", "value_set": "continuous_episodic_unknown", "required": true, "source_refs": ["S04"] },
+        { "id": "dizziness.trigger", "field": "trigger", "prompt": { "zh": "每次头晕是否总由某个动作或情况引起？", "en": "Is each episode consistently triggered by a movement or situation?" }, "answer_type": "multi_choice", "value_set": "dizziness_triggers", "required": true, "source_refs": ["S04", "S05"] },
+        { "id": "dizziness.experience", "field": "experience", "prompt": { "zh": "头晕时更像哪一种感觉？这题只用于记录。", "en": "Which feeling best matches the dizziness? This is for description only." }, "answer_type": "single_choice", "value_set": "value_sets.dizziness_experience_v1", "required": false, "source_refs": ["S04", "S09"] },
+        { "id": "dizziness.walking", "field": "walking_ability", "prompt": { "zh": "头晕时你能自己站立和行走吗？", "en": "During the dizziness, can you stand and walk without help?" }, "answer_type": "single_choice", "value_set": "walking_ability", "required": true, "source_refs": ["S05", "S09"] },
+        { "id": "dizziness.hearing_change", "field": "new_hearing_change", "prompt": { "zh": "和你平时相比，听力是否新出现变化或明显变差？", "en": "Compared with your usual hearing, is there a new or clearly worse change?" }, "answer_type": "single_choice", "value_set": "response_sets.presence_v1", "required": true, "source_refs": ["S05", "S09"] },
+        { "id": "dizziness.tinnitus", "field": "new_tinnitus", "prompt": { "zh": "是否新出现或明显加重耳鸣？", "en": "Is there new or clearly worse ringing in the ears?" }, "answer_type": "single_choice", "value_set": "response_sets.presence_v1", "required": false, "source_refs": ["S05", "S09"] }
+      ],
+      "associated_symptoms": [
+        { "code": "focal_neurologic", "label": { "zh": "新出现单侧无力/麻木、视物异常、说话或吞咽困难", "en": "New one-sided weakness or numbness, vision change, or difficulty speaking or swallowing" }, "followup_template": "associated_followup_v1", "source_refs": ["S05"] },
+        { "code": "severe_headache_neck_pain", "label": { "zh": "新出现剧烈头痛或颈部疼痛", "en": "New severe headache or neck pain" }, "followup_template": "associated_followup_v1", "source_refs": ["S09"] },
+        { "code": "syncope", "label": { "zh": "真正失去意识或晕倒", "en": "Loss of consciousness or fainting" }, "followup_template": "associated_followup_v1", "source_refs": ["S05"] },
+        { "code": "chest_pain_palpitations", "label": { "zh": "胸痛、胸闷或心跳不齐", "en": "Chest pain, chest tightness, or irregular heartbeat" }, "followup_template": "associated_followup_v1", "source_refs": ["S05"] },
+        { "code": "vomiting_diarrhea", "label": { "zh": "反复呕吐或腹泻", "en": "Repeated vomiting or diarrhea" }, "followup_template": "associated_followup_v1", "source_refs": ["S05"] },
+        { "code": "recent_flu_like", "label": { "zh": "近期感冒样不适", "en": "Recent flu-like illness" }, "followup_template": "associated_followup_v1", "source_refs": ["S05"] }
+      ],
+      "red_flags": [
+        { "id": "dizziness.neurologic", "clinician_label": { "zh": "突发头晕伴局灶神经症状", "en": "Sudden dizziness with focal neurological symptoms" }, "condition": { "field": "associated.focal_neurologic.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S05"] },
+        { "id": "dizziness.cannot_walk", "clinician_label": { "zh": "头晕时不能独立站立或行走", "en": "Unable to stand or walk independently during dizziness" }, "condition": { "field": "walking_ability", "op": "in", "value": ["cannot_stand", "cannot_walk_without_help"] }, "action": "priority_clinician_assessment", "source_refs": ["S05", "S09"] },
+        { "id": "dizziness.syncope", "clinician_label": { "zh": "头晕伴失去意识", "en": "Dizziness with loss of consciousness" }, "condition": { "field": "associated.syncope.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S05"] },
+        { "id": "dizziness.cardiac", "clinician_label": { "zh": "头晕伴胸部不适或心律异常感觉", "en": "Dizziness with chest discomfort or irregular heartbeat" }, "condition": { "field": "associated.chest_pain_palpitations.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S05", "S09"] },
+        { "id": "dizziness.new_hearing_change", "clinician_label": { "zh": "相对既有听力基线出现新的明显变化", "en": "New marked change from the person's usual hearing baseline" }, "condition": { "field": "new_hearing_change", "op": "eq", "value": "present" }, "action": "clinician_review_not_automatic_emergency", "source_refs": ["S05", "S09"] }
+      ],
+      "documentation_order": ["onset", "pattern", "episode_duration", "frequency", "trigger", "experience", "walking_ability", "severity_nrs", "progression", "new_hearing_change", "new_tinnitus", "associated_symptoms", "functional_impact"],
+      "source_refs": ["S01", "S04", "S05", "S09"]
+    },
+    {
+      "id": "fatigue",
+      "label": { "zh": "乏力", "en": "Fatigue" },
+      "terminology": { "hpo": { "id": "HP:0012378", "label": "Fatigue" }, "mesh": { "id": "D005221", "label": "Fatigue" }, "mapping_status": "exact" },
+      "aliases": [{ "zh": "没力气", "en": "Lack of energy" }, { "zh": "容易累", "en": "Easily exhausted" }],
+      "entry_prompts": [{ "zh": "你说的“累”更像没精力、想睡觉，还是肌肉使不上力？", "en": "Does “tired” mean low energy, sleepiness, or muscles not working normally?" }],
+      "question_sequence": ["red_flags", "core_hpi_v1", "symptom_specific", "associated_symptoms", "associated_followup_v1"],
+      "questions": [
+        { "id": "fatigue.experience", "field": "primary_experience", "prompt": { "zh": "最主要是哪一种感觉？", "en": "Which feeling is the main problem?" }, "answer_type": "single_choice", "value_set": "fatigue_experience", "required": true, "source_refs": ["S07", "S09"] },
+        { "id": "fatigue.baseline_change", "field": "baseline_change", "prompt": { "zh": "和生病前相比，现在能做的事情减少了多少？", "en": "Compared with before this began, how much less can you do now?" }, "answer_type": "single_choice", "value_set": "functional_change", "required": true, "source_refs": ["S07"] },
+        { "id": "fatigue.daily_pattern", "field": "daily_pattern", "prompt": { "zh": "一天中什么时候最明显？", "en": "When during the day is it most noticeable?" }, "answer_type": "multi_choice", "value_set": "day_pattern", "required": false, "source_refs": ["S01", "S09"] },
+        { "id": "fatigue.rest_response", "field": "rest_response", "prompt": { "zh": "睡觉或休息后会怎样？", "en": "How do you feel after sleep or rest?" }, "answer_type": "single_choice", "value_set": "rest_response", "required": true, "source_refs": ["S07"] },
+        { "id": "fatigue.post_exertional", "field": "post_exertional_response", "prompt": { "zh": "做完以前能承受的活动后，会不会明显更不舒服？", "en": "After an activity you used to tolerate, do you feel markedly worse?" }, "answer_type": "single_choice", "value_set": "response_sets.presence_v1", "required": true, "source_refs": ["S07"] },
+        { "id": "fatigue.recovery_time", "field": "post_exertional_recovery", "prompt": { "zh": "如果活动后变差，通常多久恢复？", "en": "If activity makes you worse, how long does recovery usually take?" }, "answer_type": "duration", "required": false, "show_if": { "field": "post_exertional_response", "op": "eq", "value": "present" }, "source_refs": ["S07"] },
+        { "id": "fatigue.cognition", "field": "cognitive_change", "prompt": { "zh": "是否比以前更难集中注意、思考或记事？", "en": "Is it harder than before to concentrate, think, or remember?" }, "answer_type": "single_choice", "value_set": "response_sets.presence_v1", "required": false, "source_refs": ["S07"] },
+        { "id": "fatigue.upright", "field": "upright_worse", "prompt": { "zh": "站立或坐直一段时间后会更难受吗？", "en": "Do you feel worse after standing or sitting upright for a while?" }, "answer_type": "single_choice", "value_set": "response_sets.presence_v1", "required": false, "source_refs": ["S07"] }
+      ],
+      "associated_symptoms": [
+        { "code": "fever_weight_loss_night_sweats", "label": { "zh": "发热、体重下降或夜间出汗", "en": "Fever, weight loss, or night sweats" }, "followup_template": "associated_followup_v1", "source_refs": ["S05", "S07"] },
+        { "code": "dyspnea_chest", "label": { "zh": "气短、胸痛或胸闷", "en": "Shortness of breath, chest pain, or chest tightness" }, "followup_template": "associated_followup_v1", "source_refs": ["S10", "S09"] },
+        { "code": "palpitations_syncope", "label": { "zh": "心慌、眼前发黑或晕倒", "en": "Palpitations, near-fainting, or fainting" }, "followup_template": "associated_followup_v1", "source_refs": ["S05", "S09"] },
+        { "code": "bleeding", "label": { "zh": "异常出血、黑便或月经过多", "en": "Unusual bleeding, black stool, or very heavy periods" }, "followup_template": "associated_followup_v1", "source_refs": ["S10", "S09"] },
+        { "code": "sleep_problem", "label": { "zh": "睡眠差、睡不解乏或白天很困", "en": "Poor sleep, unrefreshing sleep, or marked daytime sleepiness" }, "followup_template": "associated_followup_v1", "source_refs": ["S07"] },
+        { "code": "mood_interest", "label": { "zh": "持续心情低落或对事情失去兴趣", "en": "Persistent low mood or loss of interest" }, "followup_template": "associated_followup_v1", "source_refs": ["S09"] },
+        { "code": "focal_weakness", "label": { "zh": "新出现身体一侧或某个部位明显无力", "en": "New marked weakness on one side or in one body area" }, "followup_template": "associated_followup_v1", "source_refs": ["S05", "S09"] }
+      ],
+      "red_flags": [
+        { "id": "fatigue.chest_dyspnea", "clinician_label": { "zh": "乏力伴胸部不适或明显气短", "en": "Fatigue with chest discomfort or marked shortness of breath" }, "condition": { "field": "associated.dyspnea_chest.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S10", "S09"] },
+        { "id": "fatigue.syncope", "clinician_label": { "zh": "乏力伴晕倒或接近晕倒", "en": "Fatigue with fainting or near-fainting" }, "condition": { "field": "associated.palpitations_syncope.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S05", "S09"] },
+        { "id": "fatigue.bleeding", "clinician_label": { "zh": "乏力伴活动性或明显出血线索", "en": "Fatigue with active or substantial bleeding symptoms" }, "condition": { "field": "associated.bleeding.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S10", "S09"] },
+        { "id": "fatigue.focal_weakness", "clinician_label": { "zh": "主诉乏力但存在新发局灶性无力", "en": "Reported fatigue with new focal weakness" }, "condition": { "field": "associated.focal_weakness.status", "op": "eq", "value": "present" }, "action": "priority_clinician_assessment", "source_refs": ["S05", "S09"] },
+        { "id": "fatigue.severe_function_loss", "clinician_label": { "zh": "功能较基线显著下降", "en": "Marked decline from baseline function" }, "condition": { "field": "baseline_change", "op": "eq", "value": "major_reduction" }, "action": "clinician_review", "source_refs": ["S07"] }
+      ],
+      "documentation_order": ["onset", "primary_experience", "baseline_change", "daily_pattern", "episode_duration", "frequency", "severity_nrs", "rest_response", "post_exertional_response", "post_exertional_recovery", "cognitive_change", "upright_worse", "progression", "associated_symptoms", "functional_impact"],
+      "source_refs": ["S01", "S05", "S07", "S10", "S09"]
+    }
+  ],
+  "sources": [
+    { "id": "S01", "title": "病历书写基本规范", "publisher": "中华人民共和国国家卫生健康委员会（原卫生部）", "url": "https://www.nhc.gov.cn/wjw/c100175/201002/b1bec53d90f243e0861529723f00221a.shtml", "evidence_level": "A", "accessed": "2026-07-24" },
+    { "id": "S02", "title": "2021 AHA/ACC/ASE/CHEST/SAEM/SCCT/SCMR Guideline for the Evaluation and Diagnosis of Chest Pain", "publisher": "American Heart Association / American College of Cardiology", "url": "https://professional.heart.org/en/guidelines-statements/2021-ahaaccasechestsaemscctscmr-guideline-for-the-evaluation-and-diagnosis-ofcir0000000000001029", "doi": "10.1161/CIR.0000000000001029", "evidence_level": "A", "accessed": "2026-07-24" },
+    { "id": "S03", "title": "British Thoracic Society Clinical Statement on chronic cough in adults", "publisher": "British Thoracic Society", "url": "https://www.brit-thoracic.org.uk/document-library/clinical-statements/cough-in-adults/chronic-cough-in-adults/", "doi": "10.1136/thorax-2023-220592", "evidence_level": "B", "accessed": "2026-07-24" },
+    { "id": "S04", "title": "GRACE-3: Acute Dizziness and Vertigo in the Emergency Department", "publisher": "Society for Academic Emergency Medicine", "url": "https://www.saem.org/publications/grace/grace-3", "doi": "10.1111/acem.14728", "evidence_level": "A", "accessed": "2026-07-24" },
+    { "id": "S05", "title": "Adult Primary Care Guide 2016/2017", "publisher": "South Africa National Department of Health / WHO platform", "url": "https://platform.who.int/docs/default-source/mca-documents/policy-documents/guideline/zaf-rh-18-01-guideline-2016-eng-adult-primary-care-guide-2016-2017.pdf", "evidence_level": "A", "accessed": "2026-07-24" },
+    { "id": "S06", "title": "Acute Abdominal Pain in Adults: Evaluation and Diagnosis", "publisher": "American Academy of Family Physicians", "url": "https://www.aafp.org/afp/2023/0600/acute-abdominal-pain-adults", "evidence_level": "B", "accessed": "2026-07-24" },
+    { "id": "S07", "title": "Diagnosing ME/CFS", "publisher": "U.S. Centers for Disease Control and Prevention", "url": "https://www.cdc.gov/me-cfs/hcp/diagnosis/index.html", "evidence_level": "B", "accessed": "2026-07-24" },
+    { "id": "S08", "title": "Suspected sepsis in people aged 16 or over: recognition, assessment and early management (NG253)", "publisher": "National Institute for Health and Care Excellence", "url": "https://www.nice.org.uk/guidance/ng253", "evidence_level": "A", "accessed": "2026-07-24" },
+    { "id": "S09", "title": "本项目听障患者可用性与安全改写规则", "publisher": "项目内部规则", "url": "https://local.example.org/hpi-kb/usability-rules", "evidence_level": "C", "accessed": "2026-07-24" },
+    { "id": "S10", "title": "Fatigue in Adults: Evaluation and Management", "publisher": "American Academy of Family Physicians", "url": "https://www.aafp.org/afp/2023/0700/fatigue-adults", "evidence_level": "B", "accessed": "2026-07-24" }
+  ]
+}

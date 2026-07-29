@@ -1,0 +1,28 @@
+{
+  "name": "hering-interview-terminal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.12.1",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev:doctor": "pnpm --filter @hering/doctor dev",
+    "dev:patient": "pnpm --filter @hering/patient dev",
+    "build": "pnpm --filter @hering/contracts build && pnpm --filter @hering/frontend-core build && pnpm --filter @hering/doctor build && pnpm --filter @hering/patient build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm --filter=!@hering/e2e -r --if-present test",
+    "test:e2e": "pnpm --filter @hering/e2e test",
+    "contracts:generate": "pnpm --filter @hering/contracts generate"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.30.0",
+    "eslint": "^9.30.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.35.1"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@hering/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --max-warnings=0",
+    "generate": "openapi-typescript schema/openapi.json -o src/generated/openapi.ts && json2ts -i schema/realtime.schema.json -o src/generated/realtime.ts"
+  },
+  "devDependencies": {
+    "json-schema-to-typescript": "^15.0.4",
+    "openapi-typescript": "^7.8.0",
+    "typescript": "^5.8.3"
+  }
+}
+

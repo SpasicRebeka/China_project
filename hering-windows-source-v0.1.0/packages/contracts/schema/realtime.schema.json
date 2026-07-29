@@ -1,0 +1,56 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Version",
+      "type": "string"
+    },
+    "event_id": {
+      "maxLength": 128,
+      "minLength": 8,
+      "title": "Event Id",
+      "type": "string"
+    },
+    "session_id": {
+      "maxLength": 128,
+      "minLength": 8,
+      "title": "Session Id",
+      "type": "string"
+    },
+    "source_role": {
+      "enum": [
+        "doctor",
+        "patient",
+        "system"
+      ],
+      "title": "Source Role",
+      "type": "string"
+    },
+    "type": {
+      "pattern": "^[a-z][a-z0-9_.-]{1,63}$",
+      "title": "Type",
+      "type": "string"
+    },
+    "timestamp": {
+      "format": "date-time",
+      "title": "Timestamp",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    }
+  },
+  "required": [
+    "event_id",
+    "session_id",
+    "source_role",
+    "type",
+    "timestamp"
+  ],
+  "title": "RealtimeEnvelope",
+  "type": "object"
+}
