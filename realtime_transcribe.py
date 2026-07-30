@@ -14,6 +14,7 @@ import time
 from array import array
 from dataclasses import dataclass, field
 from pathlib import Path
+from textwrap import dedent
 
 import sounddevice as sd
 from openai import OpenAI
@@ -32,23 +33,57 @@ SAMPLE_RATE = 24_000
 CHANNELS = 1
 SAMPLE_WIDTH_BYTES = 2
 REALTIME_WHISPER_MODEL = "gpt-realtime-whisper"
-DEFAULT_SIMPLIFICATION_INSTRUCTIONS = (
-    "Prepare doctor speech for a patient display. Preserve all ordinary, everyday wording "
-    "as closely as possible. Do not rewrite for style, paraphrase ordinary language, or "
-    "replace time expressions such as 'long-term' with looser wording such as 'over time'. "
-    "Only replace genuinely medical or clinical terms that an everyday patient may not understand, "
-    "such as diagnoses, procedures, anatomy, tests, or technical symptom names. If you are unsure "
-    "whether a term is medical, leave it unchanged. Fix only obvious punctuation and sentence-boundary "
-    "errors. Preserve medicine names, doses, numbers, units, dates, times, allergies, measurements, "
-    "and follow-up instructions exactly. Do not add diagnosis, advice, missing facts, or corrections "
-    "to suspected speech-recognition errors. "
-    "Chinese requirement: directly replace every recognized medical or clinical term with clear, "
-    "everyday Chinese. Do not leave the technical Chinese term unchanged and do not put it in "
-    "parentheses. Keep all non-medical Chinese wording unchanged. Examples: 心动过速 becomes 心跳过快; "
-    "静脉注射 becomes 通过静脉打针给药; 心肌梗死 becomes 心脏血管突然堵住，造成心肌受损. "
-    "If the transcript is incomplete, simplify only the clear part. Return only the patient text "
-    "in the requested output language."
-)
+DEFAULT_SIMPLIFICATION_INSTRUCTIONS = dedent(
+    """\
+    Prepare temporally arriving doctor-speech transcript chunks for a patient display. The result must
+    be accurate, easy for an everyday patient to understand, and as close to the doctor's original
+    wording as possible. Follow these rules in priority order:
+
+    1. Simplify genuinely difficult or moderately difficult medical language. Replace medical or
+    clinical terms, diagnoses, procedures, anatomy, tests, and technical symptom names with direct
+    everyday wording without losing their meaning. Do not merely repeat the technical term in
+    parentheses. English examples: 'tachycardia' -> 'a heart rate that is too fast'; 'intravenous
+    injection' -> 'giving medicine through a needle into a vein'; 'myocardial infarction' -> 'a heart
+    attack caused by a blocked blood vessel damaging the heart muscle'. Chinese examples: '心动过速'
+    -> '心跳过快'; '静脉注射' -> '通过静脉打针给药'; '心肌梗死' ->
+    '心脏血管突然堵住，造成心肌受损'.
+
+    2. Preserve ordinary language. Do not paraphrase, polish, shorten, or replace words that an everyday
+    person can already understand. Preserve the speaker's degree of certainty and time wording. English
+    examples: keep 'Take one tablet every morning' unchanged; keep 'This may help over the long term'
+    unchanged, including 'may' and 'long term'. Chinese examples: keep '每天早上吃一片' unchanged; keep
+    '这可能对你以后有帮助' unchanged, including '可能'.
+
+    3. Repair chunk boundaries and presentation only when that makes temporally arriving speech
+    understandable. Join fragments that clearly form one thought; remove only accidental overlap or
+    immediate repetition caused by chunking; and correct capitalization, commas, periods, question
+    marks, exclamation marks, and obvious sentence boundaries. You may add a minimal connecting word
+    only when the intended connection is unambiguous. Do not reorder ideas, omit facts, summarize, or
+    rewrite for style. English example: 'the pain started / yesterday and it / gets worse when you walk
+    do you feel dizzy' -> 'The pain started yesterday, and it gets worse when you walk. Do you feel
+    dizzy?' Chinese example: '这个药每天吃两次 / 每天吃两次你对青霉素过敏吗' ->
+    '这个药每天吃两次。你对青霉素过敏吗？'
+
+    4. Actively correct obvious speech-recognition errors. When a recognized word or short phrase is
+    clearly unnatural, nonsensical, or from the wrong context, and therefore does not fit the surrounding
+    sentence or medical discussion, do not preserve it literally. Replace it naturally with the most
+    probable intended word or phrase, using its sound, the sentence grammar, the nearby words, and the
+    current medical topic as evidence. An obviously out-of-context word should be corrected even when
+    the transcript does not explicitly mark it as uncertain. Make the smallest possible correction and
+    leave the rest of the sentence unchanged. English example in a blood-pressure discussion: 'Your
+    blood pleasure is high' -> 'Your blood pressure is high'. Chinese example in a measurement
+    discussion: '请测量血鸭' -> '请测量血压'. If two or more replacements remain reasonably plausible,
+    retain the recognized wording rather than choosing arbitrarily. Never use a correction to invent a
+    diagnosis, medicine, dose, number, instruction, or missing fact.
+
+    Always preserve medicine names, doses, numbers, units, dates, times, allergies, measurements,
+    negation, uncertainty, and follow-up instructions exactly unless rule 4 identifies an unambiguous
+    recognition error. Do not add medical advice, diagnosis, explanation, reassurance, or facts that the
+    doctor did not say. If the transcript is incomplete, process only the clear part and do not complete
+    the thought. Return only the patient-facing text in the requested output language, with no notes,
+    labels, alternatives, or explanation of your edits.
+    """
+).strip()
 WORD_PATTERN = re.compile(r"[^\W_]+(?:'[^\W_]+)?", re.UNICODE)
 MID_SENTENCE_LOWERCASE_STARTS = {
     "a",
